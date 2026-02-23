@@ -104,12 +104,12 @@ async function benchmark(args: BenchmarkArgs = {}) {
     }
 
     process.stdout.write(
-      `>>> Remaining chunk lines to write: ${remainingLines}\r`,
+      `⏳ Remaining lines to write: ${remainingLines.toLocaleString()}\r`,
     );
   }
 
   console.log(
-    `Wrote ${LINES} temporary chunk lines to ${filepath}, starting benchmark...`,
+    `📦 Generated ${LINES.toLocaleString()} lines → ${filepath}\n▶️ Starting benchmark...`,
   );
 
   const { size: fileBytes } = await stat(filepath);
@@ -136,8 +136,8 @@ async function benchmark(args: BenchmarkArgs = {}) {
   const fileMB = fileBytes / (1_024 * 1_024);
   const throughput = fileMB / seconds;
 
-  console.log(`Read ${fileMB.toFixed(2)}MB in ${elapsedMS.toFixed(2)}ms`);
-  console.log(`Throughput: ${throughput.toFixed(2)}MB/s`);
+  console.log(`📖 Read ${fileMB.toFixed(2)} MB in ${elapsedMS.toFixed(2)} ms`);
+  console.log(`🚀 Throughput: ${throughput.toFixed(2)} MB/s`);
 
   await tryDeleteFile(filepath);
 }
