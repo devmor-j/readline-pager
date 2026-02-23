@@ -8,7 +8,6 @@ const CHUNK_SIZE = 64 * 1024;
 ========================= */
 
 export interface PageReaderOptions {
-  filepath: string;
   pageSize?: number;
   prefetch?: number;
   useWorker?: boolean;
@@ -28,9 +27,11 @@ export interface PageReader extends AsyncIterable<string[]> {
    Factory
 ========================= */
 
-export function createPageReader(options: PageReaderOptions): PageReader {
+export function createPageReader(
+  filepath: string,
+  options: PageReaderOptions = {},
+): PageReader {
   const {
-    filepath,
     pageSize = 1000,
     prefetch = 1,
     useWorker = false,

@@ -5,11 +5,10 @@ import { createTextLines, createTmpFile, tryDeleteFile } from "./utils.ts";
 
 suite("worker mode", () => {
   test("it reads correctly", async () => {
-    const content = createTextLines(2000);
-    const filePath = await createTmpFile(content, { filename: "worker.txt" });
+    const content = createTextLines(2_000);
+    const filepath = await createTmpFile(content, { filename: "worker.txt" });
 
-    const reader = createPageReader({
-      filepath: filePath,
+    const reader = createPageReader(filepath, {
       pageSize: 500,
       useWorker: true,
     });
@@ -21,17 +20,16 @@ suite("worker mode", () => {
         total += page.length;
       }
 
-      assert.equal(total, 2000);
+      assert.equal(total, 2_000);
     } finally {
-      await tryDeleteFile(filePath);
+      await tryDeleteFile(filepath);
     }
   });
 
   test("it throws when used with backward reading", () => {
     assert.throws(
       () =>
-        createPageReader({
-          filepath: "x",
+        createPageReader("x", {
           backward: true,
           useWorker: true,
         }),

@@ -114,8 +114,7 @@ async function benchmark(args: BenchmarkArgs = {}) {
 
   const { size: fileBytes } = await stat(filepath);
 
-  const reader = createPageReader({
-    filepath,
+  const reader = createPageReader(filepath, {
     pageSize: PAGE_SIZE,
     backward: BACKWARD,
     prefetch: PREFETCH,

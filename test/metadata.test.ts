@@ -1,17 +1,17 @@
 import assert from "node:assert";
 import { suite, test } from "node:test";
 import { createPageReader } from "../dist/main.js";
-import { createTmpFile, tryDeleteFile } from "./utils.ts";
+import { createTextLines, createTmpFile, tryDeleteFile } from "./utils.ts";
 
 suite("metadata", () => {
   test("firstLine and lastLine are correct", async () => {
-    const lines = Array.from({ length: 10 }, (_, i) => `L${i}`);
-    const content = lines.join("\n") + "\n";
+    const delimiter = "\n";
 
-    const filePath = await createTmpFile(content, { filename: "meta.txt" });
+    const content = createTextLines(10);
+    const filepath = await createTmpFile(content, { filename: "metadata.txt" });
 
-    const reader = createPageReader({
-      filepath: filePath,
+    const reader = createPageReader(filepath, {
+      delimiter,
       pageSize: 3,
     });
 
@@ -19,10 +19,12 @@ suite("metadata", () => {
       for await (const _ of reader) {
       }
 
+      const lines = content.split(delimiter);
+
       assert.equal(reader.firstLine, lines[0]);
-      assert.equal(reader.lastLine, lines[lines.length - 1]);
+      assert.equal(reader.lastLine, lines.at(-1));
     } finally {
-      await tryDeleteFile(filePath);
+      await tryDeleteFile(filepath);
     }
   });
 
@@ -30,10 +32,9 @@ suite("metadata", () => {
     const lines = Array.from({ length: 1234 }, (_, i) => `X${i}`);
     const content = lines.join("\n") + "\n";
 
-    const filePath = await createTmpFile(content, { filename: "count.txt" });
+    const filepath = await createTmpFile(content, { filename: "count.txt" });
 
-    const reader = createPageReader({
-      filepath: filePath,
+    const reader = createPageReader(filepath, {
       pageSize: 200,
     });
 
@@ -43,7 +44,7 @@ suite("metadata", () => {
 
       assert.equal(reader.lineCount, lines.length);
     } finally {
-      await tryDeleteFile(filePath);
+      await tryDeleteFile(filepath);
     }
   });
 });

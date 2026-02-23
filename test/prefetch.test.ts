@@ -5,12 +5,11 @@ import { createTextLines, createTmpFile, tryDeleteFile } from "./utils.ts";
 
 suite("prefetch", () => {
   test("it does not affect correctness", async () => {
-    const content = createTextLines(3000);
-    const filePath = await createTmpFile(content, { filename: "prefetch.txt" });
+    const content = createTextLines(3_000);
+    const filepath = await createTmpFile(content, { filename: "prefetch.txt" });
 
-    const reader = createPageReader({
-      filepath: filePath,
-      pageSize: 1000,
+    const reader = createPageReader(filepath, {
+      pageSize: 1_000,
       prefetch: 3,
     });
 
@@ -21,9 +20,9 @@ suite("prefetch", () => {
         total += page.length;
       }
 
-      assert.equal(total, 3000);
+      assert.equal(total, 3_000);
     } finally {
-      await tryDeleteFile(filePath);
+      await tryDeleteFile(filepath);
     }
   });
 });

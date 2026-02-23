@@ -5,12 +5,11 @@ import { createTextLines, createTmpFile, tryDeleteFile } from "./utils.ts";
 
 suite("close", () => {
   test("it stops reading immediately", async () => {
-    const content = createTextLines(5000);
-    const filePath = await createTmpFile(content, { filename: "close.txt" });
+    const content = createTextLines(5_000);
+    const filepath = await createTmpFile(content, { filename: "close.txt" });
 
-    const reader = createPageReader({
-      filepath: filePath,
-      pageSize: 1000,
+    const reader = createPageReader(filepath, {
+      pageSize: 1_000,
     });
 
     try {
@@ -22,7 +21,7 @@ suite("close", () => {
       const next = await reader.next();
       assert.equal(next, null);
     } finally {
-      await tryDeleteFile(filePath);
+      await tryDeleteFile(filepath);
     }
   });
 });

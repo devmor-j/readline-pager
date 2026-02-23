@@ -32,8 +32,8 @@ export async function createTmpFile(
   return filepath;
 }
 
-export function tryDeleteFile(filePath: string) {
-  return rm(filePath, { force: true }).catch(() => {});
+export function tryDeleteFile(filepath: string) {
+  return rm(filepath, { force: true }).catch(() => {});
 }
 
 export function createTextLines(count: number) {

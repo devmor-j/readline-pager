@@ -1,4 +1,4 @@
-# readpage
+# pagereader
 
 Memory-efficient paginated text file reader for Node.js (v18.12+) with async iteration, prefetching, and optional worker support.
 
@@ -15,7 +15,7 @@ Reads large text files page-by-page (array of lines) without loading the entire 
 ## 📦 Installation
 
 ```bash
-npm install readpage
+npm install pagereader
 ```
 
 ---
@@ -23,11 +23,9 @@ npm install readpage
 ## 🚀 Basic Usage
 
 ```js
-import { createPageReader } from "readpage";
+import { createPageReader } from "pagereader";
 
-const pageReader = createPageReader({
-  filepath: "./bigfile.txt",
-});
+const pageReader = createPageReader("./bigfile.txt");
 
 for await (const page of pageReader) {
   console.log(page[0]); // First line of current page
@@ -41,9 +39,7 @@ for await (const page of pageReader) {
 ```js
 // This is the faster usage (refer to [Iteration Performance Notes](#iteration-performance-notes))
 
-const pageReader = createPageReader({
-  filepath: "./bigfile.txt",
-});
+const pageReader = createPageReader("./bigfile.txt");
 
 while (true) {
   const page = await pageReader.next();
@@ -65,8 +61,7 @@ while (true) {
 ## ⚙️ Options
 
 ```ts
-createPageReader({
-  filepath: string,       // required
+createPageReader(filepath, {
   pageSize?: number,      // default: 1000
   prefetch?: number,      // default: 1
   useWorker?: boolean,    // default: false

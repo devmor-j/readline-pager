@@ -6,12 +6,11 @@ import { createTmpFile, tryDeleteFile } from "./utils.ts";
 suite("delimiter", () => {
   test("it works with custom delimiter", async () => {
     const content = ["a", "b", "c", "d"].join("|");
-    const filePath = await createTmpFile(content, {
+    const filepath = await createTmpFile(content, {
       filename: "delimiter.txt",
     });
 
-    const reader = createPageReader({
-      filepath: filePath,
+    const reader = createPageReader(filepath, {
       pageSize: 2,
       delimiter: "|",
     });
@@ -23,7 +22,7 @@ suite("delimiter", () => {
       assert.deepEqual(first, ["a", "b"]);
       assert.deepEqual(second, ["c", "d"]);
     } finally {
-      await tryDeleteFile(filePath);
+      await tryDeleteFile(filepath);
     }
   });
 });

@@ -8,10 +8,9 @@ suite("backward", () => {
     const lines = ["a", "b", "c", "d", "e"];
     const content = lines.join("\n");
 
-    const filePath = await createTmpFile(content, { filename: "backward.txt" });
+    const filepath = await createTmpFile(content, { filename: "backward.txt" });
 
-    const reader = createPageReader({
-      filepath: filePath,
+    const reader = createPageReader(filepath, {
       pageSize: 2,
       backward: true,
     });
@@ -25,7 +24,7 @@ suite("backward", () => {
 
       assert.deepEqual(result, [...lines].reverse());
     } finally {
-      await tryDeleteFile(filePath);
+      await tryDeleteFile(filepath);
     }
   });
 });

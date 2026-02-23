@@ -5,14 +5,12 @@ import { createPageReader } from "../dist/main.js";
 suite("filepath", () => {
   test("it throws if filepath is missing", () => {
     assert.throws(() => {
-      createPageReader({ filepath: "" });
+      createPageReader("");
     });
   });
 
   test("it throws if file does not exist on read", async () => {
-    const reader = createPageReader({
-      filepath: "./tmp/does-not-exist.txt",
-    });
+    const reader = createPageReader("./tmp/does-not-exist.txt");
 
     await assert.rejects(() => reader.next());
   });
