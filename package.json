@@ -1,0 +1,43 @@
+{
+  "name": "pagereader",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "build:test": "tsc -p tsconfig.test.json",
+    "pretest": "npm run build",
+    "test": "node --test test/**.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "~25.3.0",
+    "prettier": "~3.8.1",
+    "prettier-plugin-organize-imports": "~4.3.0",
+    "typescript": "~5.9.3"
+  },
+  "engines": {
+    "node": ">=18.12"
+  },
+  "author": "Morteza Jamshidi",
+  "description": "High-performance paginated file reader for Node.js with controlled prefetching",
+  "main": "./src/main.js",
+  "types": "./dist/main.d.ts",
+  "exports": {
+    ".": {
+      "import": "./src/main.js",
+      "require": "./src/main.js",
+      "types": "./dist/main.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "file",
+    "pagination",
+    "readline",
+    "stream",
+    "prefetch",
+    "high-performance"
+  ],
+  "license": "MIT"
+}
