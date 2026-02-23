@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
-import * as readline from "node:readline";
 import { Worker } from "node:worker_threads";
+
+const CHUNK_SIZE = 64 * 1024;
 
 /* =========================
    Public Types
@@ -9,25 +10,18 @@ import { Worker } from "node:worker_threads";
 export interface PageReaderOptions {
   filepath: string;
   pageSize?: number;
-  /** Number of pages kept prefetched in memory. 1 = no prefetch. */
   prefetch?: number;
   useWorker?: boolean;
+  backward?: boolean;
+  delimiter?: string;
 }
 
 export interface PageReader extends AsyncIterable<string[]> {
-  /** Returns next page or null when finished. */
   next(): Promise<string[] | null>;
-
-  /** Immediately stops reading and releases resources. */
   close(): void;
-}
-
-export interface PageReader extends AsyncIterable<string[]> {
-  /** Returns next page or null when finished. */
-  next(): Promise<string[] | null>;
-
-  /** Immediately stops reading and releases resources. */
-  close(): void;
+  readonly lineCount: number;
+  readonly firstLine?: string | null;
+  readonly lastLine?: string | null;
 }
 
 /* =========================
@@ -37,223 +31,349 @@ export interface PageReader extends AsyncIterable<string[]> {
 export function createPageReader(options: PageReaderOptions): PageReader {
   const {
     filepath,
-    pageSize = 1_000,
+    pageSize = 1000,
     prefetch = 1,
     useWorker = false,
+    backward = false,
+    delimiter = "\n",
   } = options;
 
   if (!filepath) throw new Error("filepath required");
   if (pageSize <= 0) throw new RangeError("pageSize must be > 0");
   if (prefetch <= 0) throw new RangeError("prefetch must be >= 1");
 
+  if (backward && useWorker)
+    throw new Error("backward not supported with useWorker");
+
   return useWorker
-    ? createWorkerReader(filepath, pageSize, prefetch)
-    : createStreamReader(filepath, pageSize, prefetch);
+    ? createWorkerReader(filepath, pageSize, prefetch, delimiter)
+    : backward
+      ? createBackwardReader(filepath, pageSize, prefetch, delimiter)
+      : createForwardReader(filepath, pageSize, prefetch, delimiter);
 }
 
 /* =========================
-   Stream Implementation
+   Shared Queue Engine
 ========================= */
 
-function createStreamReader(
+function createPageQueue() {
+  const queue: string[][] = [];
+  let resolver: (() => void) | null = null;
+
+  return {
+    queue,
+    push(page: string[]) {
+      queue.push(page);
+      resolver?.();
+      resolver = null;
+    },
+    wake() {
+      resolver?.();
+      resolver = null;
+    },
+    async shift(done: () => boolean) {
+      if (queue.length) return queue.shift()!;
+      if (done()) return null;
+      await new Promise<void>((r) => (resolver = r));
+      if (queue.length) return queue.shift()!;
+      if (done()) return null;
+      return null;
+    },
+  };
+}
+
+/* =========================
+   Forward Reader (fd-based)
+========================= */
+
+function createForwardReader(
   filepath: string,
   pageSize: number,
   prefetch: number,
+  delimiter: string,
 ): PageReader {
-  const stream = fs.createReadStream(filepath, { encoding: "utf8" });
-  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+  const pageQueue = createPageQueue();
 
-  const queue: string[][] = [];
-  let buffer: string[] = [];
+  let fd: fs.promises.FileHandle | null = null;
+  let pos = 0;
+  let size = 0;
+  let buffer = "";
   let done = false;
   let closed = false;
-  let paused = false;
-  let error: Error | null = null;
-  let resolver: (() => void) | null = null;
 
-  function maybePause(): void {
-    if (!paused && queue.length >= prefetch) {
-      rl.pause();
-      paused = true;
+  let emittedCount = 0;
+  let firstLine: string | null = null;
+  let lastLine: string | null = null;
+
+  async function init() {
+    if (fd) return;
+    fd = await fs.promises.open(filepath, "r");
+    size = (await fd.stat()).size;
+    if (size === 0) done = true;
+  }
+
+  async function fill() {
+    if (done || closed) return;
+    await init();
+    if (!fd) return;
+
+    const local: string[] = [];
+
+    while (pageQueue.queue.length < prefetch && pos < size) {
+      const readSize = Math.min(CHUNK_SIZE, size - pos);
+      const buf = Buffer.allocUnsafe(readSize);
+      const { bytesRead } = await fd.read(buf, 0, readSize, pos);
+      pos += bytesRead;
+
+      buffer += buf.toString("utf8", 0, bytesRead);
+
+      const parts = buffer.split(delimiter);
+      buffer = parts.pop() ?? "";
+
+      for (const line of parts) {
+        if (firstLine == null) firstLine = line;
+        lastLine = line;
+        local.push(line);
+
+        if (local.length === pageSize) {
+          pageQueue.push(local.splice(0, pageSize));
+        }
+      }
+    }
+
+    if (pos >= size) {
+      if (buffer !== "") {
+        if (firstLine == null) firstLine = buffer;
+        lastLine = buffer;
+        local.push(buffer);
+        buffer = "";
+      }
+
+      if (local.length) pageQueue.push(local.splice(0));
+
+      done = true;
+      await fd.close();
+      fd = null;
     }
   }
 
-  function maybeResume(): void {
-    if (paused && queue.length < prefetch) {
-      rl.resume();
-      paused = false;
-    }
-  }
-
-  rl.on("line", (line: string) => {
-    if (closed) return;
-
-    buffer.push(line);
-
-    if (buffer.length === pageSize) {
-      queue.push(buffer);
-      buffer = [];
-
-      resolver?.();
-      resolver = null;
-
-      maybePause();
-    }
-  });
-
-  rl.on("close", () => {
-    if (!closed && buffer.length) {
-      queue.push(buffer);
-    }
-    done = true;
-    resolver?.();
-  });
-
-  rl.on("error", (err: Error) => {
-    error = err;
-    done = true;
-    resolver?.();
-  });
-
-  async function next(): Promise<string[] | null> {
+  async function next() {
     if (closed) return null;
-    if (error) throw error;
-
-    if (queue.length) {
-      const page = queue.shift()!;
-      maybeResume();
-      return page;
-    }
-
-    if (done) return null;
-
-    await new Promise<void>((r) => (resolver = r));
-
-    if (queue.length) {
-      const page = queue.shift()!;
-      maybeResume();
-      return page;
-    }
-
-    return null;
+    await fill();
+    const page = await pageQueue.shift(() => done);
+    if (!page) return null;
+    emittedCount += page.length;
+    return page;
   }
 
-  function close(): void {
-    if (closed) return;
+  async function close() {
     closed = true;
-
-    queue.length = 0;
-    buffer.length = 0;
-
-    rl.removeAllListeners();
-    stream.removeAllListeners();
-
-    rl.close();
-    stream.destroy();
-
     done = true;
-    resolver?.();
+    pageQueue.queue.length = 0;
+    if (fd) await fd.close();
   }
 
   return {
     next,
     close,
+    get lineCount() {
+      return emittedCount;
+    },
+    get firstLine() {
+      return firstLine;
+    },
+    get lastLine() {
+      return lastLine;
+    },
     async *[Symbol.asyncIterator]() {
       while (true) {
-        const page = await next();
-        if (!page) break;
-        yield page;
+        const p = await next();
+        if (!p) break;
+        yield p;
       }
     },
   };
 }
 
 /* =========================
-   Worker Implementation
+   Backward Reader (fd-based)
+========================= */
+
+function createBackwardReader(
+  filepath: string,
+  pageSize: number,
+  prefetch: number,
+  delimiter: string,
+): PageReader {
+  const pageQueue = createPageQueue();
+
+  let fd: fs.promises.FileHandle | null = null;
+  let pos = 0;
+  let buffer = "";
+  let done = false;
+  let closed = false;
+
+  let emittedCount = 0;
+  let firstLine: string | null = null;
+  let lastLine: string | null = null;
+
+  async function init() {
+    if (fd) return;
+    fd = await fs.promises.open(filepath, "r");
+    const stat = await fd.stat();
+    pos = stat.size;
+    if (pos === 0) done = true;
+  }
+
+  async function fill() {
+    if (done || closed) return;
+    await init();
+    if (!fd) return;
+
+    const local: string[] = [];
+
+    while (pageQueue.queue.length < prefetch && pos > 0) {
+      const readSize = Math.min(CHUNK_SIZE, pos);
+      pos -= readSize;
+
+      const buf = Buffer.allocUnsafe(readSize);
+      await fd.read(buf, 0, readSize, pos);
+
+      buffer = buf.toString("utf8") + buffer;
+
+      const parts = buffer.split(delimiter);
+      buffer = parts.shift() ?? "";
+
+      for (let i = parts.length - 1; i >= 0; i--) {
+        const line = parts[i];
+        if (lastLine == null) lastLine = line;
+        local.push(line);
+
+        if (local.length === pageSize) {
+          pageQueue.push(local.splice(0, pageSize));
+        }
+      }
+    }
+
+    if (pos === 0) {
+      if (buffer !== "") {
+        local.push(buffer);
+        if (firstLine == null) firstLine = buffer;
+        if (lastLine == null) lastLine = buffer;
+      }
+
+      if (local.length) pageQueue.push(local.splice(0));
+      done = true;
+      await fd.close();
+      fd = null;
+    }
+  }
+
+  async function next() {
+    if (closed) return null;
+    await fill();
+    const page = await pageQueue.shift(() => done);
+    if (!page) return null;
+    emittedCount += page.length;
+    return page;
+  }
+
+  async function close() {
+    closed = true;
+    done = true;
+    pageQueue.queue.length = 0;
+    if (fd) await fd.close();
+  }
+
+  return {
+    next,
+    close,
+    get lineCount() {
+      return emittedCount;
+    },
+    get firstLine() {
+      return firstLine;
+    },
+    get lastLine() {
+      return lastLine;
+    },
+    async *[Symbol.asyncIterator]() {
+      while (true) {
+        const p = await next();
+        if (!p) break;
+        yield p;
+      }
+    },
+  };
+}
+
+/* =========================
+   Worker (forward only)
 ========================= */
 
 function createWorkerReader(
   filepath: string,
   pageSize: number,
   prefetch: number,
+  delimiter: string,
 ): PageReader {
   const worker = new Worker(new URL("./worker.js", import.meta.url), {
-    workerData: { filepath, pageSize },
+    workerData: { filepath, pageSize, delimiter },
   });
 
-  const queue: string[][] = [];
+  const pageQueue = createPageQueue();
+
   let done = false;
   let closed = false;
-  let error: Error | null = null;
-  let resolver: (() => void) | null = null;
+  let emittedCount = 0;
+  let firstLine: string | null = null;
+  let lastLine: string | null = null;
 
   worker.on("message", (msg: any) => {
-    if (closed) return;
-
     if (msg.type === "page") {
-      queue.push(msg.data);
-      resolver?.();
-      resolver = null;
-
-      if (queue.length >= prefetch) worker.postMessage({ type: "pause" });
+      pageQueue.push(msg.data);
     }
-
+    if (msg.type === "meta") {
+      firstLine ??= msg.firstLine;
+      lastLine = msg.lastLine ?? lastLine;
+    }
     if (msg.type === "done") {
       done = true;
-      resolver?.();
+      pageQueue.wake();
     }
   });
 
-  worker.on("error", (err: Error) => {
-    error = err;
-    done = true;
-    resolver?.();
-  });
-
-  async function next(): Promise<string[] | null> {
+  async function next() {
     if (closed) return null;
-    if (error) throw error;
-
-    if (queue.length) {
-      const page = queue.shift()!;
-      worker.postMessage({ type: "resume" });
-      return page;
-    }
-
-    if (done) return null;
-
-    await new Promise<void>((r) => (resolver = r));
-
-    if (queue.length) {
-      const page = queue.shift()!;
-      worker.postMessage({ type: "resume" });
-      return page;
-    }
-
-    return null;
+    const page = await pageQueue.shift(() => done);
+    if (!page) return null;
+    emittedCount += page.length;
+    return page;
   }
 
-  function close(): void {
-    if (closed) return;
+  async function close() {
     closed = true;
-
-    queue.length = 0;
-
-    worker.removeAllListeners();
-    worker.terminate();
-
     done = true;
-    resolver?.();
+    worker.terminate();
   }
 
   return {
     next,
     close,
+    get lineCount() {
+      return emittedCount;
+    },
+    get firstLine() {
+      return firstLine;
+    },
+    get lastLine() {
+      return lastLine;
+    },
     async *[Symbol.asyncIterator]() {
       while (true) {
-        const page = await next();
-        if (!page) break;
-        yield page;
+        const p = await next();
+        if (!p) break;
+        yield p;
       }
     },
   };

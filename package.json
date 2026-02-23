@@ -1,12 +1,12 @@
 {
   "name": "pagereader",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "build:test": "tsc -p tsconfig.test.json",
+    "prepublishOnly": "npm run build",
     "pretest": "npm run build",
-    "test": "node --test test/**.test.ts"
+    "test": "node --test test/**/*.test.ts"
   },
   "devDependencies": {
     "@types/node": "~25.3.0",
@@ -14,30 +14,32 @@
     "prettier-plugin-organize-imports": "~4.3.0",
     "typescript": "~5.9.3"
   },
-  "engines": {
-    "node": ">=18.12"
-  },
-  "author": "Morteza Jamshidi",
-  "description": "High-performance paginated file reader for Node.js with controlled prefetching",
-  "main": "./src/main.js",
+  "main": "./dist/main.js",
   "types": "./dist/main.d.ts",
   "exports": {
     ".": {
-      "import": "./src/main.js",
-      "require": "./src/main.js",
-      "types": "./dist/main.d.ts"
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.js"
     }
   },
   "files": [
     "dist"
   ],
   "keywords": [
-    "file",
+    "nodejs",
+    "file-reader",
     "pagination",
-    "readline",
-    "stream",
-    "prefetch",
-    "high-performance"
+    "large-files",
+    "async-iterator",
+    "worker-threads",
+    "streaming",
+    "memory-efficient",
+    "log-processing"
   ],
+  "description": "Memory-efficient paginated text file reader for Node.js with async iteration, prefetching, and optional worker support.",
+  "engines": {
+    "node": ">=18.12"
+  },
+  "author": "Morteza Jamshidi",
   "license": "MIT"
 }

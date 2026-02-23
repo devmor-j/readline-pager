@@ -1,43 +1,53 @@
 import * as fs from "node:fs";
-import * as readline from "node:readline";
 import { parentPort, workerData } from "node:worker_threads";
 
-const { filepath, pageSize } = workerData as {
-  filepath: string;
-  pageSize: number;
-};
+const { filepath, pageSize, delimiter = "\n" } = workerData;
 
-const stream = fs.createReadStream(filepath, { encoding: "utf8" });
-const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+(async () => {
+  const fd = await fs.promises.open(filepath, "r");
+  const stat = await fd.stat();
 
-let buffer: string[] = [];
-let paused = false;
+  const CHUNK = 64 * 1024;
+  let pos = 0;
+  let buffer = "";
+  let firstLine: string | null = null;
+  let lastLine: string | null = null;
 
-rl.on("line", (line: string) => {
-  buffer.push(line);
+  const local: string[] = [];
 
-  if (buffer.length === pageSize) {
-    parentPort?.postMessage({ type: "page", data: buffer });
-    buffer = [];
+  while (pos < stat.size) {
+    const readSize = Math.min(CHUNK, stat.size - pos);
+    const buf = Buffer.allocUnsafe(readSize);
+    const { bytesRead } = await fd.read(buf, 0, readSize, pos);
+    pos += bytesRead;
 
-    if (paused) rl.pause();
+    buffer += buf.toString("utf8", 0, bytesRead);
+    const parts = buffer.split(delimiter);
+    buffer = parts.pop() ?? "";
+
+    for (const line of parts) {
+      if (firstLine == null) firstLine = line;
+      lastLine = line;
+      local.push(line);
+
+      if (local.length === pageSize) {
+        parentPort?.postMessage({ type: "page", data: local.splice(0) });
+      }
+    }
   }
-});
 
-rl.on("close", () => {
-  if (buffer.length) parentPort?.postMessage({ type: "page", data: buffer });
+  if (buffer !== "") {
+    if (firstLine == null) firstLine = buffer;
+    lastLine = buffer;
+    local.push(buffer);
+  }
 
+  if (local.length) {
+    parentPort?.postMessage({ type: "page", data: local });
+  }
+
+  parentPort?.postMessage({ type: "meta", firstLine, lastLine });
   parentPort?.postMessage({ type: "done" });
-});
 
-parentPort?.on("message", (msg: any) => {
-  if (msg.type === "pause") {
-    paused = true;
-    rl.pause();
-  }
-
-  if (msg.type === "resume") {
-    paused = false;
-    rl.resume();
-  }
-});
+  await fd.close();
+})();

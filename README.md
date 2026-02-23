@@ -1,153 +1,126 @@
 # readpage
 
-⚡ High-performance paginated file reader for Node.js with controlled prefetching.
+Memory-efficient paginated text file reader for Node.js (v18.12+) with async iteration, prefetching, and optional worker support.
 
-`readpage` streams large text files efficiently and returns them page-by-page (array of lines), without loading the entire file into memory.
+Reads large text files page-by-page (array of lines) without loading the entire file into memory.
 
-Built with:
-
-- ✅ Native Node.js streams
-- ✅ Zero runtime dependencies
+- ✅ Zero dependencies
 - ✅ Async iterator support
-- ✅ Controlled prefetch buffering
+- ✅ Forward and backward reading
 - ✅ Optional worker thread mode
-- ✅ Full TypeScript types
+- ✅ Fully typed (TypeScript)
 
 ---
 
-## 📦 Installation
+## Installation
 
 ```bash
 npm install readpage
 ```
 
-Node.js **>= 18.12.0** required.
-
 ---
 
-## 🚀 Basic Usage
+## Basic Usage
 
 ```js
 import { createPageReader } from "readpage";
-// const { createPageReader } = require("readpage");
 
 const reader = createPageReader({
   filepath: "./bigfile.txt",
-  pageSize: 1_000, // lines per page
-  prefetch: 1, // pages buffered in memory
 });
 
 for await (const page of reader) {
-  console.log(page[0]); // first line of page
+  console.log(page[0]); // First line of current page
 }
 ```
 
 ---
 
-## 🔁 Manual Iteration
+## Manual Iteration
 
 ```js
 const reader = createPageReader({
   filepath: "./bigfile.txt",
-  pageSize: 1_000,
-  prefetch: 2,
 });
 
 while (true) {
   const page = await reader.next();
-  if (!page) break; // page is `null` when EOF is reached
+  if (!page) break;
 
   console.log(page[0]);
 }
 ```
 
----
-
-## ⚙️ Options
-
-```ts
-createPageReader({
-  filepath: string,     // required
-  pageSize?: number,    // default: 1_000
-  prefetch?: number,    // default: 1
-  useWorker?: boolean   // default: false
-})
-```
-
-### `pageSize`
-
-Number of lines per page.
-
-### `prefetch`
-
-Number of pages kept ready in memory.
-
-- `1` → no prefetch (minimal memory)
-- `2+` → background page buffering
-- Higher value = smoother throughput, more memory usage
-
-### `useWorker`
-
-Moves page processing to a Worker thread.
-
-Recommended only if you perform CPU-heavy processing per page.
-
----
-
-## 🔄 API
-
-### `reader.next()`
-
-```ts
-Promise<string[] | null>;
-```
-
-Returns:
+`next()` returns:
 
 - `string[]` → next page
 - `null` → end of file
 
 ---
 
-### Async Iterator
+## Options
 
 ```ts
-for await (const page of reader)
+createPageReader({
+  filepath: string,       // required
+  pageSize?: number,      // default: 1000
+  prefetch?: number,      // default: 1
+  useWorker?: boolean,    // default: false
+  backward?: boolean,     // default: false
+  delimiter?: string      // default: "\n"
+})
 ```
 
-Each `page` is:
+### pageSize
 
-```ts
-string[]
-```
+Number of lines per page.
+
+### prefetch
+
+Maximum number of pages buffered internally.
+
+Higher values increase throughput but use more memory.
+
+### useWorker
+
+Reads file in a worker thread (forward mode only).
+
+Use this only if you want file parsing off the main thread.
+
+### backward
+
+Reads file from end to start (not supported with `useWorker`).
+
+### delimiter
+
+Line separator. Default is `"\n"`.
 
 ---
 
-### `reader.close()`
+## API
 
-Immediately stops reading and releases resources.
+### reader.next()
+
+```ts
+Promise<string[] | null>;
+```
+
+Returns the next page or `null` when finished.
+
+---
+
+### reader.close()
+
+Stops reading and releases resources.
 
 Safe to call at any time.
 
 ---
 
-## 🧠 Design Philosophy
+## Properties
 
-- Streaming, not buffering entire files
-- Deterministic pagination
-- Minimal abstraction
-- No hidden magic
-- No dependencies
-
-Optimized for large file workloads.
-
----
-
-## 📊 When to Use Worker Mode
-
-Use `useWorker: true` only if:
-
-- You perform heavy CPU transformations per page
-- You want to isolate file parsing from main thread
-
-For pure file reading, default stream mode is faster.
+```ts
+reader.lineCount; // total lines emitted so far
+reader.firstLine; // first line in file (when known)
+reader.lastLine; // last line in file (when known)
+```
