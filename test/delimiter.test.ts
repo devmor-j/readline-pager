@@ -1,29 +1,28 @@
 import assert from "node:assert";
 import { test } from "node:test";
 import { createPageReader } from "../dist/main.js";
-import { createTextLines, createTmpFile, deleteFile } from "./utils.ts";
+import { createTmpFile, deleteFile } from "./utils.ts";
 
 /* -------------------------------------------------- */
-/* close */
+/* delimiter */
 /* -------------------------------------------------- */
 
-test("close stops reading immediately", async () => {
-  const content = createTextLines(5000);
-  const filePath = await createTmpFile("close.txt", content);
+test("custom delimiter works", async () => {
+  const content = ["a", "b", "c", "d"].join("|");
+  const filePath = await createTmpFile("delimiter.txt", content);
 
   const reader = createPageReader({
     filepath: filePath,
-    pageSize: 1000,
+    pageSize: 2,
+    delimiter: "|",
   });
 
   try {
     const first = await reader.next();
-    assert.ok(first);
+    const second = await reader.next();
 
-    await reader.close();
-
-    const next = await reader.next();
-    assert.equal(next, null);
+    assert.deepEqual(first, ["a", "b"]);
+    assert.deepEqual(second, ["c", "d"]);
   } finally {
     await deleteFile(filePath);
   }

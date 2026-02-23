@@ -4,38 +4,30 @@ import { createPageReader } from "../dist/main.js";
 import { createTextLines, createTmpFile, deleteFile } from "./utils.ts";
 
 /* -------------------------------------------------- */
-/* worker mode */
+/* backward */
 /* -------------------------------------------------- */
 
-test("worker mode reads correctly", async () => {
-  const content = createTextLines(2000);
-  const filePath = await createTmpFile("worker.txt", content);
+test("backward reads from end to start", async () => {
+  const content = createTextLines(5);
+  const filePath = await createTmpFile("backward.txt", content);
 
   const reader = createPageReader({
     filepath: filePath,
-    pageSize: 500,
-    useWorker: true,
+    pageSize: 2,
+    backward: true,
   });
 
   try {
-    let total = 0;
+    const pages: string[][] = [];
 
     for await (const page of reader) {
-      total += page.length;
+      pages.push(page);
     }
 
-    assert.equal(total, 2000);
+    const flat = pages.flat();
+
+    assert.deepEqual(flat, ["line-4", "line-3", "line-2", "line-1", "line-0"]);
   } finally {
     await deleteFile(filePath);
   }
-});
-
-test("backward + worker throws", () => {
-  assert.throws(() => {
-    createPageReader({
-      filepath: "x",
-      backward: true,
-      useWorker: true,
-    });
-  });
 });

@@ -4,12 +4,12 @@ import { createPageReader } from "../dist/main.js";
 import { createTextLines, createTmpFile, deleteFile } from "./utils.ts";
 
 /* -------------------------------------------------- */
-/* close */
+/* pageSize behavior */
 /* -------------------------------------------------- */
 
-test("close stops reading immediately", async () => {
-  const content = createTextLines(5000);
-  const filePath = await createTmpFile("close.txt", content);
+test("pageSize splits pages correctly", async () => {
+  const content = createTextLines(2500);
+  const filePath = await createTmpFile("pagesize.txt", content);
 
   const reader = createPageReader({
     filepath: filePath,
@@ -18,12 +18,14 @@ test("close stops reading immediately", async () => {
 
   try {
     const first = await reader.next();
-    assert.ok(first);
+    const second = await reader.next();
+    const third = await reader.next();
+    const fourth = await reader.next();
 
-    await reader.close();
-
-    const next = await reader.next();
-    assert.equal(next, null);
+    assert.equal(first?.length, 1000);
+    assert.equal(second?.length, 1000);
+    assert.equal(third?.length, 500);
+    assert.equal(fourth, null);
   } finally {
     await deleteFile(filePath);
   }

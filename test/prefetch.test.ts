@@ -3,22 +3,28 @@ import { test } from "node:test";
 import { createPageReader } from "../dist/main.js";
 import { createTextLines, createTmpFile, deleteFile } from "./utils.ts";
 
-test("prefetch buffers multiple pages", async () => {
-  const content = createTextLines(3_000);
+/* -------------------------------------------------- */
+/* prefetch (behavioral correctness only) */
+/* -------------------------------------------------- */
+
+test("prefetch does not affect correctness", async () => {
+  const content = createTextLines(3000);
   const filePath = await createTmpFile("prefetch.txt", content);
 
   const reader = createPageReader({
     filepath: filePath,
-    pageSize: 1_000,
-    prefetch: 2,
+    pageSize: 1000,
+    prefetch: 3,
   });
 
   try {
-    const page1 = await reader.next();
-    const page2 = await reader.next();
+    let total = 0;
 
-    assert.equal(page1?.length, 1_000);
-    assert.equal(page2?.length, 1_000);
+    for await (const page of reader) {
+      total += page.length;
+    }
+
+    assert.equal(total, 3000);
   } finally {
     await deleteFile(filePath);
   }
