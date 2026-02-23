@@ -1,33 +1,31 @@
 import assert from "node:assert";
-import { test } from "node:test";
+import { suite, test } from "node:test";
 import { createPageReader } from "../dist/main.js";
-import { createTextLines, createTmpFile, deleteFile } from "./utils.ts";
+import { createTmpFile, tryDeleteFile } from "./utils.ts";
 
-/* -------------------------------------------------- */
-/* backward */
-/* -------------------------------------------------- */
+suite("backward", () => {
+  test("it reads backward from end to start", async () => {
+    const lines = ["a", "b", "c", "d", "e"];
+    const content = lines.join("\n");
 
-test("backward reads from end to start", async () => {
-  const content = createTextLines(5);
-  const filePath = await createTmpFile("backward.txt", content);
+    const filePath = await createTmpFile(content, { filename: "backward.txt" });
 
-  const reader = createPageReader({
-    filepath: filePath,
-    pageSize: 2,
-    backward: true,
-  });
+    const reader = createPageReader({
+      filepath: filePath,
+      pageSize: 2,
+      backward: true,
+    });
 
-  try {
-    const pages: string[][] = [];
+    try {
+      const result: string[] = [];
 
-    for await (const page of reader) {
-      pages.push(page);
+      for await (const page of reader) {
+        result.push(...page);
+      }
+
+      assert.deepEqual(result, [...lines].reverse());
+    } finally {
+      await tryDeleteFile(filePath);
     }
-
-    const flat = pages.flat();
-
-    assert.deepEqual(flat, ["line-4", "line-3", "line-2", "line-1", "line-0"]);
-  } finally {
-    await deleteFile(filePath);
-  }
+  });
 });

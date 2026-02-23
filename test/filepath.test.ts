@@ -1,21 +1,19 @@
 import assert from "node:assert";
-import { test } from "node:test";
+import { suite, test } from "node:test";
 import { createPageReader } from "../dist/main.js";
 
-/* -------------------------------------------------- */
-/* filepath validation */
-/* -------------------------------------------------- */
-
-test("throws if filepath is missing", () => {
-  assert.throws(() => {
-    createPageReader({ filepath: "" });
-  });
-});
-
-test("throws if file does not exist on read", async () => {
-  const reader = createPageReader({
-    filepath: "./tmp/does-not-exist.txt",
+suite("filepath", () => {
+  test("it throws if filepath is missing", () => {
+    assert.throws(() => {
+      createPageReader({ filepath: "" });
+    });
   });
 
-  await assert.rejects(() => reader.next());
+  test("it throws if file does not exist on read", async () => {
+    const reader = createPageReader({
+      filepath: "./tmp/does-not-exist.txt",
+    });
+
+    await assert.rejects(() => reader.next());
+  });
 });

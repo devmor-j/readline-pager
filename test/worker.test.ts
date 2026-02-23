@@ -1,41 +1,41 @@
 import assert from "node:assert";
-import { test } from "node:test";
+import { suite, test } from "node:test";
 import { createPageReader } from "../dist/main.js";
-import { createTextLines, createTmpFile, deleteFile } from "./utils.ts";
+import { createTextLines, createTmpFile, tryDeleteFile } from "./utils.ts";
 
-/* -------------------------------------------------- */
-/* worker mode */
-/* -------------------------------------------------- */
+suite("worker mode", () => {
+  test("it reads correctly", async () => {
+    const content = createTextLines(2000);
+    const filePath = await createTmpFile(content, { filename: "worker.txt" });
 
-test("worker mode reads correctly", async () => {
-  const content = createTextLines(2000);
-  const filePath = await createTmpFile("worker.txt", content);
-
-  const reader = createPageReader({
-    filepath: filePath,
-    pageSize: 500,
-    useWorker: true,
-  });
-
-  try {
-    let total = 0;
-
-    for await (const page of reader) {
-      total += page.length;
-    }
-
-    assert.equal(total, 2000);
-  } finally {
-    await deleteFile(filePath);
-  }
-});
-
-test("backward + worker throws", () => {
-  assert.throws(() => {
-    createPageReader({
-      filepath: "x",
-      backward: true,
+    const reader = createPageReader({
+      filepath: filePath,
+      pageSize: 500,
       useWorker: true,
     });
+
+    try {
+      let total = 0;
+
+      for await (const page of reader) {
+        total += page.length;
+      }
+
+      assert.equal(total, 2000);
+    } finally {
+      await tryDeleteFile(filePath);
+    }
+  });
+
+  test("it throws when used with backward reading", () => {
+    assert.throws(
+      () =>
+        createPageReader({
+          filepath: "x",
+          backward: true,
+          useWorker: true,
+        }),
+      /backward not supported/,
+    );
   });
 });

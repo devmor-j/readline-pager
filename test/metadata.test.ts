@@ -1,47 +1,49 @@
 import assert from "node:assert";
-import { test } from "node:test";
+import { suite, test } from "node:test";
 import { createPageReader } from "../dist/main.js";
-import { createTextLines, createTmpFile, deleteFile } from "./utils.ts";
+import { createTmpFile, tryDeleteFile } from "./utils.ts";
 
-/* -------------------------------------------------- */
-/* metadata */
-/* -------------------------------------------------- */
+suite("metadata", () => {
+  test("firstLine and lastLine are correct", async () => {
+    const lines = Array.from({ length: 10 }, (_, i) => `L${i}`);
+    const content = lines.join("\n") + "\n";
 
-test("firstLine and lastLine are correct", async () => {
-  const content = createTextLines(10);
-  const filePath = await createTmpFile("meta.txt", content);
+    const filePath = await createTmpFile(content, { filename: "meta.txt" });
 
-  const reader = createPageReader({
-    filepath: filePath,
-    pageSize: 3,
+    const reader = createPageReader({
+      filepath: filePath,
+      pageSize: 3,
+    });
+
+    try {
+      for await (const _ of reader) {
+      }
+
+      assert.equal(reader.firstLine, lines[0]);
+      assert.equal(reader.lastLine, lines[lines.length - 1]);
+    } finally {
+      await tryDeleteFile(filePath);
+    }
   });
 
-  try {
-    for await (const _ of reader) {
+  test("lineCount tracks emitted lines", async () => {
+    const lines = Array.from({ length: 1234 }, (_, i) => `X${i}`);
+    const content = lines.join("\n") + "\n";
+
+    const filePath = await createTmpFile(content, { filename: "count.txt" });
+
+    const reader = createPageReader({
+      filepath: filePath,
+      pageSize: 200,
+    });
+
+    try {
+      for await (const _ of reader) {
+      }
+
+      assert.equal(reader.lineCount, lines.length);
+    } finally {
+      await tryDeleteFile(filePath);
     }
-
-    assert.equal(reader.firstLine, "line-0");
-    assert.equal(reader.lastLine, "line-9");
-  } finally {
-    await deleteFile(filePath);
-  }
-});
-
-test("lineCount tracks emitted lines", async () => {
-  const content = createTextLines(1234);
-  const filePath = await createTmpFile("count.txt", content);
-
-  const reader = createPageReader({
-    filepath: filePath,
-    pageSize: 200,
   });
-
-  try {
-    for await (const _ of reader) {
-    }
-
-    assert.equal(reader.lineCount, 1234);
-  } finally {
-    await deleteFile(filePath);
-  }
 });

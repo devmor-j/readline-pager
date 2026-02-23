@@ -47,7 +47,7 @@ const pageReader = createPageReader({
 
 while (true) {
   const page = await pageReader.next();
-  if (page === null) break;
+  if (!page) break;
 
   console.log(page[0]);
 }
@@ -58,9 +58,7 @@ while (true) {
 - `string[]` → next page
 - `null` → end of file
 
-> **Note:** using `if (!page) break;` to stop reading is not safe;
-> because an empty line could stop reaching the end of file,
-> since empty strings (`""`) are falsy in JavaScript.
+> **Note:** using `if (!page) break;` is safe; because truthiness of `[""]` is not confused with `null`.
 
 ---
 

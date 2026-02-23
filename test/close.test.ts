@@ -1,30 +1,28 @@
 import assert from "node:assert";
-import { test } from "node:test";
+import { suite, test } from "node:test";
 import { createPageReader } from "../dist/main.js";
-import { createTextLines, createTmpFile, deleteFile } from "./utils.ts";
+import { createTextLines, createTmpFile, tryDeleteFile } from "./utils.ts";
 
-/* -------------------------------------------------- */
-/* close */
-/* -------------------------------------------------- */
+suite("close", () => {
+  test("it stops reading immediately", async () => {
+    const content = createTextLines(5000);
+    const filePath = await createTmpFile(content, { filename: "close.txt" });
 
-test("close stops reading immediately", async () => {
-  const content = createTextLines(5000);
-  const filePath = await createTmpFile("close.txt", content);
+    const reader = createPageReader({
+      filepath: filePath,
+      pageSize: 1000,
+    });
 
-  const reader = createPageReader({
-    filepath: filePath,
-    pageSize: 1000,
+    try {
+      const first = await reader.next();
+      assert.ok(first);
+
+      reader.close();
+
+      const next = await reader.next();
+      assert.equal(next, null);
+    } finally {
+      await tryDeleteFile(filePath);
+    }
   });
-
-  try {
-    const first = await reader.next();
-    assert.ok(first);
-
-    await reader.close();
-
-    const next = await reader.next();
-    assert.equal(next, null);
-  } finally {
-    await deleteFile(filePath);
-  }
 });
