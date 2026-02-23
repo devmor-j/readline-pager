@@ -106,6 +106,8 @@ function createForwardReader(
   let firstLine: string | null = null;
   let lastLine: string | null = null;
 
+  const local: string[] = [];
+
   async function init() {
     if (fd) return;
     fd = await fs.promises.open(filepath, "r");
@@ -118,8 +120,6 @@ function createForwardReader(
     await init();
     if (!fd) return;
 
-    const local: string[] = [];
-
     while (pageQueue.queue.length < prefetch && pos < size) {
       const readSize = Math.min(CHUNK_SIZE, size - pos);
       const buf = Buffer.allocUnsafe(readSize);
@@ -128,33 +128,36 @@ function createForwardReader(
 
       buffer += buf.toString("utf8", 0, bytesRead);
 
-      const parts = buffer.split(delimiter);
-      buffer = parts.pop() ?? "";
-
-      for (const line of parts) {
-        if (firstLine == null) firstLine = line;
-        lastLine = line;
+      let idx: number;
+      while ((idx = buffer.indexOf(delimiter)) !== -1) {
+        const line = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + delimiter.length);
         local.push(line);
 
-        if (local.length === pageSize) {
+        while (local.length >= pageSize) {
           pageQueue.push(local.splice(0, pageSize));
         }
       }
     }
 
     if (pos >= size) {
-      if (buffer !== "") {
-        if (firstLine == null) firstLine = buffer;
-        lastLine = buffer;
-        local.push(buffer);
+      if (buffer.length > 0) {
+        const parts = buffer.split(delimiter);
+        for (const line of parts) {
+          local.push(line);
+        }
         buffer = "";
       }
 
-      if (local.length) pageQueue.push(local.splice(0));
+      while (local.length > 0) {
+        pageQueue.push(local.splice(0, pageSize));
+      }
 
       done = true;
-      await fd.close();
-      fd = null;
+      if (fd) {
+        await fd.close();
+        fd = null;
+      }
     }
   }
 
@@ -164,6 +167,10 @@ function createForwardReader(
     const page = await pageQueue.shift(() => done);
     if (!page) return null;
     emittedCount += page.length;
+
+    if (firstLine === null) firstLine = page[0];
+    lastLine = page[page.length - 1];
+
     return page;
   }
 
@@ -233,7 +240,7 @@ function createBackwardReader(
 
     const local: string[] = [];
 
-    while (pageQueue.queue.length < prefetch && pos > 0) {
+    while (pageQueue.queue.length === 0 && pos > 0) {
       const readSize = Math.min(CHUNK_SIZE, pos);
       pos -= readSize;
 
@@ -242,31 +249,46 @@ function createBackwardReader(
 
       buffer = buf.toString("utf8") + buffer;
 
-      const parts = buffer.split(delimiter);
-      buffer = parts.shift() ?? "";
+      let idx: number;
 
-      for (let i = parts.length - 1; i >= 0; i--) {
-        const line = parts[i];
-        if (lastLine == null) lastLine = line;
+      while ((idx = buffer.lastIndexOf(delimiter)) !== -1) {
+        const line = buffer.slice(idx + delimiter.length);
+        buffer = buffer.slice(0, idx);
         local.push(line);
 
-        if (local.length === pageSize) {
+        while (local.length >= pageSize) {
           pageQueue.push(local.splice(0, pageSize));
         }
       }
     }
 
     if (pos === 0) {
-      if (buffer !== "") {
-        local.push(buffer);
-        if (firstLine == null) firstLine = buffer;
-        if (lastLine == null) lastLine = buffer;
+      let idx: number;
+
+      while ((idx = buffer.lastIndexOf(delimiter)) !== -1) {
+        const line = buffer.slice(idx + delimiter.length);
+        buffer = buffer.slice(0, idx);
+        local.push(line);
+
+        while (local.length >= pageSize) {
+          pageQueue.push(local.splice(0, pageSize));
+        }
       }
 
-      if (local.length) pageQueue.push(local.splice(0));
+      if (buffer !== "") {
+        local.push(buffer);
+        buffer = "";
+      }
+
+      if (local.length) {
+        pageQueue.push(local.splice(0));
+        return;
+      }
+
       done = true;
       await fd.close();
       fd = null;
+      return;
     }
   }
 
@@ -276,6 +298,10 @@ function createBackwardReader(
     const page = await pageQueue.shift(() => done);
     if (!page) return null;
     emittedCount += page.length;
+
+    if (firstLine == null) firstLine = page[0];
+    lastLine = page[page.length - 1];
+
     return page;
   }
 
