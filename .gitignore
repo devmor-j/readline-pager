@@ -3,6 +3,8 @@ dist
 tmp
 .npm
 *.log
+*.csv
+benchmark_*.txt
 .DS_Store
 .vscode
 .cache

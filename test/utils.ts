@@ -1,26 +1,47 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { appendFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const TMP_DIR = "./tmp";
 
+export interface CreateTmpFileOptions {
+  filename?: string;
+  append?: boolean;
+  encoding?: BufferEncoding;
+}
+
 await mkdir(TMP_DIR, { recursive: true });
 
+// TODO: make filename optional and turn to object arg
 export async function createTmpFile(
-  filename: string,
   content: string,
+  {
+    filename = randomUUID(),
+    append = false,
+    encoding = "utf8",
+  }: CreateTmpFileOptions,
 ): Promise<string> {
-  const filePath = join(TMP_DIR, filename);
+  const filepath = join(TMP_DIR, filename);
 
-  await writeFile(filePath, content);
+  if (append) {
+    await appendFile(filepath, content, encoding);
+  } else {
+    await writeFile(filepath, content, encoding);
+  }
 
-  return filePath;
+  return filepath;
 }
 
-export function deleteFile(filePath: string) {
-  return rm(filePath, { force: true });
+export function tryDeleteFile(filePath: string) {
+  return rm(filePath, { force: true }).catch(() => {});
 }
 
-export function createTextLines(length = 1_000) {
-  const lines = Array.from({ length }, (_, i) => `line-${i}`);
+export function createTextLines(count: number) {
+  const lines: string[] = [];
+
+  for (let i = 0; i < count; i++) {
+    lines.push(randomUUID());
+  }
+
   return lines.join("\n");
 }
