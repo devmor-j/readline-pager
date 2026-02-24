@@ -2,7 +2,7 @@ import { open } from "node:fs/promises";
 import { parentPort, workerData } from "node:worker_threads";
 import { CHUNK_SIZE } from "./constants.js";
 
-const { filepath, pageSize, delimiter = "\n" } = workerData;
+const { filepath, pageSize, delimiter } = workerData;
 
 (async () => {
   const fd = await open(filepath, "r");

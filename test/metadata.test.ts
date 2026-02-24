@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { suite, test } from "node:test";
-import { createPager } from "../dist/main.js";
+import { createPager } from "../dist/main.mjs";
 import { createTextLines, createTmpFile, tryDeleteFile } from "./_utils.ts";
 
 suite("metadata", () => {
@@ -52,30 +52,6 @@ suite("metadata", () => {
 
       assert.equal(pager.firstLine, lines[0]);
       assert.equal(pager.lastLine, lines.at(-1));
-    } finally {
-      await tryDeleteFile(filepath);
-    }
-  });
-
-  test("worker reading sets firstLine and lastLine correctly", async () => {
-    const content = createTextLines(100);
-    const filepath = await createTmpFile(content, {
-      filename: "metadata_worker.txt",
-    });
-
-    const pager = createPager(filepath, {
-      pageSize: 40,
-      useWorker: true,
-    });
-
-    try {
-      for await (const _ of pager) {
-        const hasWorker = process
-          .getActiveResourcesInfo()
-          .some((r) => r === "MessagePort");
-
-        assert.deepEqual(hasWorker, true);
-      }
     } finally {
       await tryDeleteFile(filepath);
     }

@@ -1,5 +1,5 @@
 import { FileHandle, open } from "node:fs/promises";
-import { CHUNK_SIZE } from "../constants.js";
+import { CHUNK_SIZE, ENCODING } from "../constants.js";
 import { createPageQueue } from "../queue.js";
 import type { Pager, ReaderOptions } from "../types.js";
 
@@ -42,7 +42,7 @@ export function createBackwardReader(
       const buf = Buffer.allocUnsafe(readSize);
       await fd.read(buf, 0, readSize, pos);
 
-      buffer = buf.toString("utf8") + buffer;
+      buffer += buf.toString(ENCODING);
 
       let idx: number;
       while ((idx = buffer.lastIndexOf(delimiter)) !== -1) {

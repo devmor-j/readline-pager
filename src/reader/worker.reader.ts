@@ -2,6 +2,12 @@ import { Worker } from "node:worker_threads";
 import { createPageQueue } from "../queue.js";
 import type { Pager, ReaderOptions } from "../types.js";
 
+const isESM = typeof import.meta !== "undefined";
+
+const workerFile = isESM
+  ? new URL("./worker.mjs", import.meta.url)
+  : require.resolve("./worker.cjs");
+
 export function createWorkerReader(
   filepath: string,
   options: ReaderOptions,
@@ -12,7 +18,7 @@ export function createWorkerReader(
     prefetch, // TODO: design prefetch logic for workers
   } = options;
 
-  const worker = new Worker(new URL("../worker.js", import.meta.url), {
+  const worker = new Worker(new URL(workerFile, import.meta.url), {
     workerData: { filepath, pageSize, delimiter },
   });
 

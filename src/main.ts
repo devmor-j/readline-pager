@@ -10,7 +10,7 @@ export function createPager(
   options: PagerOptions = {},
 ): Pager {
   const {
-    pageSize = 1000,
+    pageSize = 1_000,
     delimiter = "\n",
     prefetch = 1,
     backward = false,

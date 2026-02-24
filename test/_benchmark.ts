@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createInterface } from "node:readline";
-import { createPager } from "../dist/main.js";
+import { createPager } from "../dist/main.mjs";
 import { createTextLines, createTmpFile, tryDeleteFile } from "./_utils.ts";
 
 interface BenchmarkArgs {

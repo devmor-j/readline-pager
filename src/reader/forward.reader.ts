@@ -1,5 +1,5 @@
 import { FileHandle, open } from "node:fs/promises";
-import { CHUNK_SIZE } from "../constants.js";
+import { CHUNK_SIZE, ENCODING } from "../constants.js";
 import { createPageQueue } from "../queue.js";
 import type { Pager, ReaderOptions } from "../types.js";
 
@@ -42,7 +42,7 @@ export function createForwardReader(
       const { bytesRead } = await fd.read(buf, 0, readSize, pos);
       pos += bytesRead;
 
-      buffer += buf.toString("utf8", 0, bytesRead);
+      buffer += buf.toString(ENCODING, 0, bytesRead);
 
       let idx: number;
       while ((idx = buffer.indexOf(delimiter)) !== -1) {

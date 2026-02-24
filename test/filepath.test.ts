@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { chmod } from "node:fs/promises";
 import { suite, test } from "node:test";
-import { createPager } from "../dist/main.js";
+import { createPager } from "../dist/main.mjs";
 import { createTmpFile, tryDeleteFile } from "./_utils.ts";
 
 suite("filepath", () => {

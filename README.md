@@ -2,7 +2,7 @@
 
 Memory-efficient, paginated file reader for Node.js with async iteration, prefetching, backward reading and optional worker support.
 
-`readline-pager` reads large text files page-by-page (an array of lines) without loading the entire file into memory. It is implemented with Node.js `fs` + `worker_threads`, has zero runtime dependencies, and is fully typed (TypeScript).
+`readline-pager` reads large text files page-by-page without loading the entire file into memory.
 
 - ✅ Zero dependencies
 - ✅ Async iterator support (`for await...of`)
@@ -26,7 +26,7 @@ npm install readline-pager
 ```ts
 import { createPager } from "readline-pager";
 
-const pager = createPager("./bigfile.txt", { pageSize: 1000, prefetch: 1 });
+const pager = createPager("./bigfile.txt");
 
 for await (const page of pager) {
   console.log(page[0]); // first line of the current page
@@ -60,19 +60,19 @@ while ((page = await pager.next()) !== null) {
 
 ```ts
 createPager(filepath, {
-  pageSize?: number,      // default: 1000
-  prefetch?: number,      // default: 1
-  useWorker?: boolean,    // default: false (forward only)
-  backward?: boolean,     // default: false
+  pageSize?: number,      // default: 1_000
   delimiter?: string      // default: "\n"
+  prefetch?: number,      // default: 1
+  backward?: boolean,     // default: false
+  useWorker?: boolean,    // default: false (forward only)
 });
 ```
 
 - `pageSize` — number of lines per page.
+- `delimiter` — line separator.
 - `prefetch` — max pages buffered internally. Higher increases throughput but uses more memory.
-- `useWorker` — move parsing to a worker thread (forward only).
 - `backward` — read file from end → start (not supported with `useWorker`).
-- `delimiter` — line separator (defaults to `"\n"`).
+- `useWorker` — move parsing to a worker thread (forward only).
 
 ---
 
@@ -82,11 +82,10 @@ createPager(filepath, {
 
 Returns the next page or `null` when finished. Empty lines are preserved.
 
-> Note: Unlike Node.js `readline`, which skips empty files or empty lines at the start, `readline-pager` always returns all lines.
->
-> - A completely empty file (`0` bytes) produces `[""]` on the first read.
-> - A file with multiple empty lines returns each line as an empty string (e.g., `["", ""]` for two empty lines).  
->   Node.js `readline` would emit fewer or no `line` events in these cases.
+**Note:** Unlike Node.js `readline`, which skips empty files or empty lines at the start, `readline-pager` always returns all lines.
+
+- A completely empty file (`0` bytes) produces `[""]` on the first read.
+- A file with multiple empty lines returns each line as an empty string (e.g., `["", ""]` for two empty lines). Node.js `readline` would emit fewer or no `line` events in these cases.
 
 ✅ Key points:
 
@@ -161,7 +160,6 @@ Benchmarks were executed on a high-end consumer Linux machine (SSD + fast CPU) u
 
 ```bash
 npm ci
-npm run build
 npm test
 ```
 

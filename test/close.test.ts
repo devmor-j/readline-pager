@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { suite, test } from "node:test";
-import { createPager } from "../dist/main.js";
+import { createPager } from "../dist/main.mjs";
 import { createTextLines, createTmpFile, tryDeleteFile } from "./_utils.ts";
 
 suite("close", () => {

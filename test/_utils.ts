@@ -14,18 +14,14 @@ await mkdir(TMP_DIR, { recursive: true });
 
 export async function createTmpFile(
   content: string,
-  {
-    filename = randomUUID(),
-    append = false,
-    encoding = "utf8",
-  }: CreateTmpFileOptions = {},
+  { filename = randomUUID(), append = false }: CreateTmpFileOptions = {},
 ): Promise<string> {
   const filepath = join(TMP_DIR, filename);
 
   if (append) {
-    await appendFile(filepath, content, encoding);
+    await appendFile(filepath, content);
   } else {
-    await writeFile(filepath, content, encoding);
+    await writeFile(filepath, content);
   }
 
   return filepath;
