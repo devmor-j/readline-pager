@@ -4,9 +4,9 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "prepublishOnly": "npm run build",
     "pretest": "npm run build",
-    "test": "node --test test/**/*.test.ts"
+    "test": "node --test --experimental-test-coverage test/**/*.test.ts",
+    "prepublishOnly": "npm run build && npm run test"
   },
   "devDependencies": {
     "@types/node": "~25.3.0",
@@ -27,16 +27,19 @@
   ],
   "keywords": [
     "nodejs",
+    "readline",
+    "paginated-readline",
     "file-reader",
     "pagination",
     "large-files",
     "async-iterator",
-    "worker-threads",
     "streaming",
     "memory-efficient",
-    "log-processing"
+    "high-performance",
+    "log-processing",
+    "backward-reading"
   ],
-  "description": "Memory-efficient paginated text file reader for Node.js with async iteration, prefetching, and optional worker support.",
+  "description": "Memory-efficient paginated file reader for Node.js with async iteration, prefetching, backward reading and optional worker support.",
   "engines": {
     "node": ">=18.12"
   },

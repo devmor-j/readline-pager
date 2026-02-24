@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
+import { createInterface } from "node:readline";
 import { createPageReader } from "../dist/main.js";
 import { createTextLines, createTmpFile, tryDeleteFile } from "./utils.ts";
 
@@ -108,35 +110,49 @@ async function benchmark(args: BenchmarkArgs = {}) {
     );
   }
 
+  const { size: fileBytes } = await stat(filepath);
+
   console.log(
     `📦 Generated ${LINES.toLocaleString()} lines → ${filepath}\n▶️ Starting benchmark...`,
   );
 
-  const { size: fileBytes } = await stat(filepath);
+  const TIME = {
+    readline: { start: BigInt(0), end: BigInt(0) },
+    pagereader: { start: BigInt(0), end: BigInt(0) },
+  };
 
-  const reader = createPageReader(filepath, {
+  const lineReader = createInterface(createReadStream(filepath));
+
+  TIME.readline.start = process.hrtime.bigint();
+  for await (const _ of lineReader) {
+  }
+  TIME.readline.end = process.hrtime.bigint();
+
+  const pageReader = createPageReader(filepath, {
     pageSize: PAGE_SIZE,
     backward: BACKWARD,
     prefetch: PREFETCH,
     useWorker: USE_WORKER,
   });
 
-  const startTime = process.hrtime.bigint();
-
-  while (true) {
-    const page = await reader.next();
-    if (page === null) break;
+  TIME.pagereader.start = process.hrtime.bigint();
+  for await (const _ of pageReader) {
   }
+  TIME.pagereader.end = process.hrtime.bigint();
 
-  const endTime = process.hrtime.bigint();
+  const logThroughput = (name: string, endTime: bigint, startTime: bigint) => {
+    const elapsedMS = Number(endTime - startTime) / 1e6;
+    const seconds = elapsedMS / 1_000;
+    const fileMB = fileBytes / (1_024 * 1_024);
+    const throughput = fileMB / seconds;
 
-  const elapsedMS = Number(endTime - startTime) / 1e6;
-  const seconds = elapsedMS / 1_000;
-  const fileMB = fileBytes / (1_024 * 1_024);
-  const throughput = fileMB / seconds;
+    console.log(
+      `🚀 [${name}] Read ${fileMB.toFixed(2)} MB in ${elapsedMS.toFixed(2)} ms. Throughput: ${throughput.toFixed(2)} MB/s`,
+    );
+  };
 
-  console.log(`📖 Read ${fileMB.toFixed(2)} MB in ${elapsedMS.toFixed(2)} ms`);
-  console.log(`🚀 Throughput: ${throughput.toFixed(2)} MB/s`);
+  logThroughput("readline  ", TIME.readline.end, TIME.readline.start);
+  logThroughput("pagereader", TIME.pagereader.end, TIME.pagereader.start);
 
   await tryDeleteFile(filepath);
 }

@@ -1,6 +1,6 @@
 # pagereader
 
-Memory-efficient paginated text file reader for Node.js (v18.12+) with async iteration, prefetching, and optional worker support.
+Memory-efficient paginated file reader for Node.js (v18.12+) with async iteration, prefetching, backward reading and optional worker support.
 
 Reads large text files page-by-page (array of lines) without loading the entire file into memory.
 
@@ -9,7 +9,8 @@ Reads large text files page-by-page (array of lines) without loading the entire 
 - ✅ Forward and backward reading
 - ✅ Optional worker thread mode
 - ✅ Fully typed (TypeScript)
-- ✅ ~2.8x faster than Node.js `readline` pacakge
+- ✅ ~95% Test coverage
+- ✅ ~2.5x Faster than pure Node.js `readline`
 
 ---
 
@@ -38,7 +39,7 @@ for await (const page of pageReader) {
 ## 🔁 Manual Iteration
 
 ```js
-// This is the faster usage (refer to [Iteration Performance Notes](#iteration-performance-notes))
+// This is the faster usage (refer to [Iteration Performance Notes])
 
 const pageReader = createPageReader("./bigfile.txt");
 
@@ -105,15 +106,13 @@ Line separator. Default is `"\n"`.
 Promise<string[] | null>;
 ```
 
-Returns the next page or `null` when finished.
+Returns the next page or `null` when finished. Empty lines are not skipped.
 
 ---
 
 ### reader.close()
 
-Stops reading and releases resources.
-
-Safe to call at any time.
+Stops reading and releases resources immediately. Safe to call at any time.
 
 ---
 
@@ -121,13 +120,13 @@ Safe to call at any time.
 
 ```ts
 reader.lineCount; // total lines emitted so far
-reader.firstLine; // first line in file (when known)
-reader.lastLine; // last line in file (when known)
+reader.firstLine; // first line read (available on first page read)
+reader.lastLine; // last line read (available & updated on each page read)
 ```
 
 ## ⚡ Benchmark
 
-Minimal benchmark to measure read performance:
+Minimal benchmark to compare `readline` and `readpage`:
 
 ```bash
 # rely on default options
@@ -136,53 +135,35 @@ node test/benchmark.js
 node test/benchmark.ts --lines=20000 --page-size=500 --prefetch=4 --backward
 ```
 
-It will output:
+Benchmarks were executed on a high-end consumer Linux machine with a 5.5GHz CPU & SSD with read speed upto 7GB/s using generated files (filled with random UUIDs).
 
-```
-Took `t`ms to read `x` lines with page size of `y`
-```
+### 📊 Summary (Average of Multiple Runs)
 
-### Benchmark Report Using [hyperfine](https://github.com/sharkdp/hyperfine)
-
-These results were obtained on a high-end consumer Linux machine with a 5.5GHz CPU & SSD with read speed upto 7GB/s.
-
-#### Lines = 1,000
-
-| pageSize | mean time (ms) | range (ms)  |
-| -------- | -------------- | ----------- |
-| 1        | 43.5           | 35.1 – 56.2 |
-| 100      | 42.2           | 33.8 – 59.6 |
-| 1000     | 41.9           | 34.3 – 54.7 |
+| Lines       | File Size (MB) | Implementation | Avg Time (ms) | Avg Throughput (MB/s) | Speedup vs `readline` |
+| ----------- | -------------- | -------------- | ------------- | --------------------- | --------------------- |
+| 1,000,000   | 35.29 MB       | readline       | 100.21        | 352.31                | —                     |
+| 1,000,000   | 35.29 MB       | readpage       | 43.31         | 815.71                | **2.32× faster**      |
+| 10,000,000  | 352.86 MB      | readline       | 802.61        | 439.80                | —                     |
+| 10,000,000  | 352.86 MB      | readpage       | 292.33        | 1207.77               | **2.75× faster**      |
+| 100,000,000 | 3528.59 MB     | readline       | 7777.52       | 453.75                | —                     |
+| 100,000,000 | 3528.59 MB     | readpage       | 2742.99       | 1286.50               | **2.83× faster**      |
 
 ---
 
-#### Lines = 1,000,000
+### 🔎 Key Takeaways
 
-| pageSize | mean time (ms) | range (ms)    |
-| -------- | -------------- | ------------- |
-| 1        | 724.2          | 688.1 – 743.0 |
-| 100      | 494.0          | 462.0 – 536.6 |
-| 1000     | 501.2          | 476.8 – 534.8 |
+- `readpage` is consistently **2.3×–2.8× faster** than Node.js `readline`
+- Performance advantage increases with file size
+- Sustained throughput exceeds **1.2 GB/s** on large files
+- Scales efficiently up to multi-GB inputs
 
----
-
-#### Lines = 10,000,000
-
-| pageSize | mean time (s) | range (s)     |
-| -------- | ------------- | ------------- |
-| 1        | 5.615         | 5.370 – 5.839 |
-| 100      | 3.514         | 3.373 – 3.801 |
-| 1000     | 3.560         | 3.410 – 3.713 |
-
----
-
-### 📌 Observations
+#### `pageSize` Impact
 
 - For **small files (1k lines)**, page size barely matters — all results are within ~1ms.
 - For **large files (1M+ lines)**, `pageSize = 1` is dramatically slower (≈1.5× slower at 1M or 10M).
 - Beyond `pageSize = 100`, gains flatten — 100 and 1000 perform nearly the same.
 - Best overall balance across all datasets appears around **pageSize = 100–1000**.
-- Extremely large page sizes do not meaningfully outperform 1000.
+- Extremely large page sizes do not meaningfully outperform 1000 (ex. 5000).
 - Performance scales roughly linearly with total line count when page size is reasonable.
 
 #### `prefetch` Impact:
@@ -205,26 +186,9 @@ It does not help when:
 - Full-file sequential reading.
 - Disk I/O and parsing are already the bottleneck.
 
-### VS Native Node.js `readline`
-
-```ts
-// readline (native method)
-const lineReader = createInterface(createReadStream(filepath));
-for await (const _ of lineReader) {
-}
-
-// readpage (this pacakge)
-const reader = createPageReader(filepath);
-for await (const _ of lineReader) {
-}
-
-// compare for yourself; with default options,
-// on my machine gains are between 2.5x-3.1x (average ~2.8x)
-```
-
 ---
 
-## Iteration Performance Notes
+## 📌 Iteration Performance Notes
 
 ### ⚡ Recommended: `while` + `next()`
 
