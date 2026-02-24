@@ -1,7 +1,6 @@
 import { open } from "node:fs/promises";
 import { parentPort, workerData } from "node:worker_threads";
-
-const CHUNK_SIZE = 64 * 1024;
+import { CHUNK_SIZE } from "./constants.js";
 
 const { filepath, pageSize, delimiter = "\n" } = workerData;
 

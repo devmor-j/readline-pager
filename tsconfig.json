@@ -10,6 +10,7 @@
     "declaration": true,
     "sourceMap": false,
     "esModuleInterop": false,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "emitDeclarationOnly": false
   }
 }
