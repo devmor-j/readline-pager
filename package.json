@@ -1,9 +1,8 @@
 {
   "name": "readline-pager",
   "version": "0.2.0",
-  "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsdown",
     "pretest": "npm run build",
     "test": "node --test --experimental-test-coverage test/**/*.test.ts",
     "prepublishOnly": "npm run build && npm run test"
@@ -12,14 +11,18 @@
     "@types/node": "~25.3.0",
     "prettier": "~3.8.1",
     "prettier-plugin-organize-imports": "~4.3.0",
+    "tsdown": "~0.20.3",
     "typescript": "~5.9.3"
   },
-  "main": "./dist/main.js",
-  "types": "./dist/main.d.ts",
+  "type": "module",
+  "main": "./dist/main.cjs",
+  "module": "./dist/main.mjs",
+  "types": "./dist/main.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/main.d.ts",
-      "import": "./dist/main.js"
+      "require": "./dist/main.cjs",
+      "import": "./dist/main.mjs",
+      "types": "./dist/main.d.mts"
     }
   },
   "files": [

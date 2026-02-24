@@ -30,3 +30,5 @@ export function createPager(
       ? createBackwardReader(filepath, { pageSize, prefetch, delimiter })
       : createForwardReader(filepath, { pageSize, prefetch, delimiter });
 }
+
+export type * from "./types.js";
