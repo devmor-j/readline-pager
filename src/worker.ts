@@ -1,4 +1,4 @@
-import * as fs from "node:fs";
+import { open } from "node:fs/promises";
 import { parentPort, workerData } from "node:worker_threads";
 
 const CHUNK_SIZE = 64 * 1024;
@@ -6,18 +6,15 @@ const CHUNK_SIZE = 64 * 1024;
 const { filepath, pageSize, delimiter = "\n" } = workerData;
 
 (async () => {
-  const fd = await fs.promises.open(filepath, "r");
-  const stat = await fd.stat();
+  const fd = await open(filepath, "r");
+  const { size } = await fd.stat();
 
   let pos = 0;
   let buffer = "";
-  let firstLine: string | null = null;
-  let lastLine: string | null = null;
-
   const local: string[] = [];
 
-  while (pos < stat.size) {
-    const readSize = Math.min(CHUNK_SIZE, stat.size - pos);
+  while (pos < size) {
+    const readSize = Math.min(CHUNK_SIZE, size - pos);
     const buf = Buffer.allocUnsafe(readSize);
     const { bytesRead } = await fd.read(buf, 0, readSize, pos);
     pos += bytesRead;
@@ -27,8 +24,6 @@ const { filepath, pageSize, delimiter = "\n" } = workerData;
     buffer = parts.pop() ?? "";
 
     for (const line of parts) {
-      if (firstLine == null) firstLine = line;
-      lastLine = line;
       local.push(line);
 
       if (local.length === pageSize) {
@@ -38,8 +33,6 @@ const { filepath, pageSize, delimiter = "\n" } = workerData;
   }
 
   if (buffer !== "") {
-    if (firstLine == null) firstLine = buffer;
-    lastLine = buffer;
     local.push(buffer);
   }
 
@@ -47,7 +40,6 @@ const { filepath, pageSize, delimiter = "\n" } = workerData;
     parentPort?.postMessage({ type: "page", data: local });
   }
 
-  parentPort?.postMessage({ type: "meta", firstLine, lastLine });
   parentPort?.postMessage({ type: "done" });
 
   await fd.close();

@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { chmod } from "node:fs/promises";
 import { suite, test } from "node:test";
 import { createPager } from "../dist/main.js";
-import { createTmpFile, tryDeleteFile } from "./utils.ts";
+import { createTmpFile, tryDeleteFile } from "./_utils.ts";
 
 suite("filepath", () => {
   test("it throws if filepath is missing", () => {

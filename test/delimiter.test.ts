@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { suite, test } from "node:test";
 import { createPager } from "../dist/main.js";
-import { createTmpFile, tryDeleteFile } from "./utils.ts";
+import { createTmpFile, tryDeleteFile } from "./_utils.ts";
 
 suite("delimiter", () => {
   test("it works with custom delimiter", async () => {

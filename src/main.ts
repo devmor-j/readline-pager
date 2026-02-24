@@ -167,7 +167,7 @@ function createForwardReader(
     if (!page) return null;
     emittedCount += page.length;
 
-    if (firstLine === null) firstLine = page[0];
+    firstLine ??= page[0];
     lastLine = page[page.length - 1];
 
     return page;
@@ -285,7 +285,7 @@ function createBackwardReader(
     if (!page) return null;
     emittedCount += page.length;
 
-    if (firstLine === null) firstLine = page[0];
+    firstLine ??= page[0];
     lastLine = page[page.length - 1];
 
     return page;
@@ -327,7 +327,7 @@ function createBackwardReader(
 function createWorkerReader(
   filepath: string,
   pageSize: number,
-  prefetch: number,
+  prefetch: number, // TODO: design prefetch logic for workers
   delimiter: string,
 ): Pager {
   const worker = new Worker(new URL("./worker.js", import.meta.url), {
@@ -346,10 +346,6 @@ function createWorkerReader(
     if (msg.type === "page") {
       pageQueue.push(msg.data);
     }
-    if (msg.type === "meta") {
-      firstLine ??= msg.firstLine;
-      lastLine = msg.lastLine ?? lastLine;
-    }
     if (msg.type === "done") {
       done = true;
       pageQueue.wake();
@@ -361,6 +357,10 @@ function createWorkerReader(
     const page = await pageQueue.shift(() => done);
     if (!page) return null;
     emittedCount += page.length;
+
+    firstLine ??= page[0];
+    lastLine = page[page.length - 1];
+
     return page;
   }
 

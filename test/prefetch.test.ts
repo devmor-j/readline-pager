@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { suite, test } from "node:test";
 import { createPager } from "../dist/main.js";
-import { createTextLines, createTmpFile, tryDeleteFile } from "./utils.ts";
+import { createTextLines, createTmpFile, tryDeleteFile } from "./_utils.ts";
 
 suite("prefetch", () => {
   test("prefetch > 1 does not affect correctness", async () => {

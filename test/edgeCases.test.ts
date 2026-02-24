@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { suite, test } from "node:test";
 import { createPager } from "../dist/main.js";
-import { createTmpFile, tryDeleteFile } from "./utils.ts";
+import { createTmpFile, tryDeleteFile } from "./_utils.ts";
 
 suite("edge cases", () => {
   test("empty file yields single empty line", async () => {

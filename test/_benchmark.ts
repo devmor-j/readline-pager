@@ -3,7 +3,7 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { createPager } from "../dist/main.js";
-import { createTextLines, createTmpFile, tryDeleteFile } from "./utils.ts";
+import { createTextLines, createTmpFile, tryDeleteFile } from "./_utils.ts";
 
 interface BenchmarkArgs {
   lines?: number;
