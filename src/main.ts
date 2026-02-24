@@ -141,13 +141,12 @@ function createForwardReader(
     }
 
     if (pos >= size) {
-      if (buffer.length > 0) {
-        const parts = buffer.split(delimiter);
-        for (const line of parts) {
-          local.push(line);
-        }
-        buffer = "";
+      // Split remaining buffer; every split counts, even empty strings
+      const parts = buffer.length > 0 ? buffer.split(delimiter) : [""];
+      for (const line of parts) {
+        local.push(line);
       }
+      buffer = "";
 
       while (local.length > 0) {
         pageQueue.push(local.splice(0, pageSize));
@@ -262,11 +261,12 @@ function createBackwardReader(
     }
 
     if (pos === 0) {
-      if (buffer.length > 0) local.push(buffer);
+      local.push(buffer);
+      buffer = "";
 
       while (local.length > 0) {
         const sliceSize = Math.min(pageSize, local.length);
-        const page = local.splice(0, sliceSize);
+        const page = local.splice(local.length - sliceSize, sliceSize);
         pageQueue.push(page);
       }
 

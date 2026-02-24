@@ -28,7 +28,8 @@
   "keywords": [
     "nodejs",
     "readline",
-    "paginated-readline",
+    "readline-pager",
+    "pager",
     "file-reader",
     "pagination",
     "large-files",
@@ -39,7 +40,7 @@
     "log-processing",
     "backward-reading"
   ],
-  "description": "Memory-efficient paginated file reader for Node.js with async iteration, prefetching, backward reading and optional worker support.",
+  "description": "Memory-efficient, paginated file reader for Node.js with async iteration, prefetching, backward reading and optional worker support.",
   "engines": {
     "node": ">=18.12"
   },
