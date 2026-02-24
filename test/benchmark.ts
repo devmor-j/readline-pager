@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createInterface } from "node:readline";
-import { createPageReader } from "../dist/main.js";
+import { createPager } from "../dist/main.js";
 import { createTextLines, createTmpFile, tryDeleteFile } from "./utils.ts";
 
 interface BenchmarkArgs {
@@ -118,27 +118,27 @@ async function benchmark(args: BenchmarkArgs = {}) {
 
   const TIME = {
     readline: { start: BigInt(0), end: BigInt(0) },
-    pagereader: { start: BigInt(0), end: BigInt(0) },
+    pager: { start: BigInt(0), end: BigInt(0) },
   };
 
-  const lineReader = createInterface(createReadStream(filepath));
+  const readline = createInterface(createReadStream(filepath));
 
   TIME.readline.start = process.hrtime.bigint();
-  for await (const _ of lineReader) {
+  for await (const _ of readline) {
   }
   TIME.readline.end = process.hrtime.bigint();
 
-  const pageReader = createPageReader(filepath, {
+  const pager = createPager(filepath, {
     pageSize: PAGE_SIZE,
     backward: BACKWARD,
     prefetch: PREFETCH,
     useWorker: USE_WORKER,
   });
 
-  TIME.pagereader.start = process.hrtime.bigint();
-  for await (const _ of pageReader) {
+  TIME.pager.start = process.hrtime.bigint();
+  for await (const _ of pager) {
   }
-  TIME.pagereader.end = process.hrtime.bigint();
+  TIME.pager.end = process.hrtime.bigint();
 
   const logThroughput = (name: string, endTime: bigint, startTime: bigint) => {
     const elapsedMS = Number(endTime - startTime) / 1e6;
@@ -151,8 +151,8 @@ async function benchmark(args: BenchmarkArgs = {}) {
     );
   };
 
-  logThroughput("readline  ", TIME.readline.end, TIME.readline.start);
-  logThroughput("pagereader", TIME.pagereader.end, TIME.pagereader.start);
+  logThroughput("readline", TIME.readline.end, TIME.readline.start);
+  logThroughput("pager   ", TIME.pager.end, TIME.pager.start);
 
   await tryDeleteFile(filepath);
 }

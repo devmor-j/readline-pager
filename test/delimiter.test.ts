@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { suite, test } from "node:test";
-import { createPageReader } from "../dist/main.js";
+import { createPager } from "../dist/main.js";
 import { createTmpFile, tryDeleteFile } from "./utils.ts";
 
 suite("delimiter", () => {
@@ -10,14 +10,14 @@ suite("delimiter", () => {
       filename: "delimiter.txt",
     });
 
-    const reader = createPageReader(filepath, {
+    const pager = createPager(filepath, {
       pageSize: 2,
       delimiter: "|",
     });
 
     try {
-      const first = await reader.next();
-      const second = await reader.next();
+      const first = await pager.next();
+      const second = await pager.next();
 
       assert.deepEqual(first, ["a", "b"]);
       assert.deepEqual(second, ["c", "d"]);

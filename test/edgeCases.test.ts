@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { suite, test } from "node:test";
-import { createPageReader } from "../dist/main.js";
+import { createPager } from "../dist/main.js";
 import { createTmpFile, tryDeleteFile } from "./utils.ts";
 
 suite("edge cases", () => {
@@ -10,14 +10,14 @@ suite("edge cases", () => {
       filename: "empty.txt",
     });
 
-    const reader = createPageReader(filepath);
+    const pager = createPager(filepath);
 
     try {
-      const page = await reader.next();
+      const page = await pager.next();
       assert.equal(page, null);
-      assert.equal(reader.lineCount, 0);
-      assert.equal(reader.firstLine, undefined);
-      assert.equal(reader.lastLine, undefined);
+      assert.equal(pager.lineCount, 0);
+      assert.equal(pager.firstLine, undefined);
+      assert.equal(pager.lastLine, undefined);
     } finally {
       await tryDeleteFile(filepath);
     }
@@ -29,16 +29,16 @@ suite("edge cases", () => {
       filename: "single.txt",
     });
 
-    const reader = createPageReader(filepath);
+    const pager = createPager(filepath);
 
     try {
       const pages: string[] = [];
-      for await (const p of reader) pages.push(...p);
+      for await (const p of pager) pages.push(...p);
 
       assert.deepEqual(pages, ["only-line"]);
-      assert.equal(reader.firstLine, "only-line");
-      assert.equal(reader.lastLine, "only-line");
-      assert.equal(reader.lineCount, 1);
+      assert.equal(pager.firstLine, "only-line");
+      assert.equal(pager.lastLine, "only-line");
+      assert.equal(pager.lineCount, 1);
     } finally {
       await tryDeleteFile(filepath);
     }
@@ -50,14 +50,14 @@ suite("edge cases", () => {
       filename: "no-trailing.txt",
     });
 
-    const reader = createPageReader(filepath);
+    const pager = createPager(filepath);
 
     try {
       const lines: string[] = [];
-      for await (const p of reader) lines.push(...p);
+      for await (const p of pager) lines.push(...p);
 
       assert.deepEqual(lines, ["a", "b", "c"]);
-      assert.equal(reader.lineCount, 3);
+      assert.equal(pager.lineCount, 3);
     } finally {
       await tryDeleteFile(filepath);
     }
@@ -69,15 +69,15 @@ suite("edge cases", () => {
       filename: "empty-line.txt",
     });
 
-    const reader = createPageReader(filepath, {
+    const pager = createPager(filepath, {
       pageSize: 1,
     });
 
     try {
       const collected: string[] = [];
 
-      for await (const page of reader) {
-        assert.ok(page !== null, "Reader returned null before EOF");
+      for await (const page of pager) {
+        assert.ok(page !== null, "pager returned null before EOF");
         assert.ok(Array.isArray(page));
 
         collected.push(...page);
@@ -90,8 +90,8 @@ suite("edge cases", () => {
   });
 
   test("throws on invalid options", () => {
-    assert.throws(() => createPageReader("", { pageSize: 10 }), /filepath/);
-    assert.throws(() => createPageReader("x", { pageSize: 0 }), /pageSize/);
-    assert.throws(() => createPageReader("x", { prefetch: 0 }), /prefetch/);
+    assert.throws(() => createPager("", { pageSize: 10 }), /filepath/);
+    assert.throws(() => createPager("x", { pageSize: 0 }), /pageSize/);
+    assert.throws(() => createPager("x", { prefetch: 0 }), /prefetch/);
   });
 });

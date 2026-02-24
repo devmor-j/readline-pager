@@ -1,13 +1,13 @@
 import * as fs from "node:fs";
 import { Worker } from "node:worker_threads";
 
-const CHUNK_SIZE = 64 * 1024;
-
 /* =========================
-   Public Types
+   Public Types & Enums
 ========================= */
 
-export interface PageReaderOptions {
+const CHUNK_SIZE = 64 * 1024;
+
+export interface PagerOptions {
   pageSize?: number;
   prefetch?: number;
   useWorker?: boolean;
@@ -15,7 +15,7 @@ export interface PageReaderOptions {
   delimiter?: string;
 }
 
-export interface PageReader extends AsyncIterable<string[]> {
+export interface Pager extends AsyncIterable<string[]> {
   next(): Promise<string[] | null>;
   close(): void;
   readonly lineCount: number;
@@ -27,10 +27,10 @@ export interface PageReader extends AsyncIterable<string[]> {
    Factory
 ========================= */
 
-export function createPageReader(
+export function createPager(
   filepath: string,
-  options: PageReaderOptions = {},
-): PageReader {
+  options: PagerOptions = {},
+): Pager {
   const {
     pageSize = 1000,
     prefetch = 1,
@@ -84,7 +84,7 @@ function createPageQueue() {
 }
 
 /* =========================
-   Forward Reader (fd-based)
+   Read Forward (fd-based)
 ========================= */
 
 function createForwardReader(
@@ -92,7 +92,7 @@ function createForwardReader(
   pageSize: number,
   prefetch: number,
   delimiter: string,
-): PageReader {
+): Pager {
   const pageQueue = createPageQueue();
 
   let fd: fs.promises.FileHandle | null = null;
@@ -204,7 +204,7 @@ function createForwardReader(
 }
 
 /* =========================
-   Backward Reader (fd-based)
+   Read Backward (fd-based)
 ========================= */
 
 function createBackwardReader(
@@ -212,7 +212,7 @@ function createBackwardReader(
   pageSize: number,
   prefetch: number,
   delimiter: string,
-): PageReader {
+): Pager {
   const pageQueue = createPageQueue();
 
   let fd: fs.promises.FileHandle | null = null;
@@ -329,7 +329,7 @@ function createWorkerReader(
   pageSize: number,
   prefetch: number,
   delimiter: string,
-): PageReader {
+): Pager {
   const worker = new Worker(new URL("./worker.js", import.meta.url), {
     workerData: { filepath, pageSize, delimiter },
   });

@@ -1,13 +1,14 @@
 import * as fs from "node:fs";
 import { parentPort, workerData } from "node:worker_threads";
 
+const CHUNK_SIZE = 64 * 1024;
+
 const { filepath, pageSize, delimiter = "\n" } = workerData;
 
 (async () => {
   const fd = await fs.promises.open(filepath, "r");
   const stat = await fd.stat();
 
-  const CHUNK = 64 * 1024;
   let pos = 0;
   let buffer = "";
   let firstLine: string | null = null;
@@ -16,7 +17,7 @@ const { filepath, pageSize, delimiter = "\n" } = workerData;
   const local: string[] = [];
 
   while (pos < stat.size) {
-    const readSize = Math.min(CHUNK, stat.size - pos);
+    const readSize = Math.min(CHUNK_SIZE, stat.size - pos);
     const buf = Buffer.allocUnsafe(readSize);
     const { bytesRead } = await fd.read(buf, 0, readSize, pos);
     pos += bytesRead;

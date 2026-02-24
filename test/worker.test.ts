@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { suite, test } from "node:test";
-import { createPageReader } from "../dist/main.js";
+import { createPager } from "../dist/main.js";
 import { createTextLines, createTmpFile, tryDeleteFile } from "./utils.ts";
 
 suite("worker mode", () => {
@@ -8,7 +8,7 @@ suite("worker mode", () => {
     const content = createTextLines(2_000);
     const filepath = await createTmpFile(content, { filename: "worker.txt" });
 
-    const reader = createPageReader(filepath, {
+    const pager = createPager(filepath, {
       pageSize: 500,
       useWorker: true,
     });
@@ -16,7 +16,7 @@ suite("worker mode", () => {
     try {
       let total = 0;
 
-      for await (const page of reader) {
+      for await (const page of pager) {
         total += page.length;
       }
 
@@ -29,7 +29,7 @@ suite("worker mode", () => {
   test("it throws when used with backward reading", () => {
     assert.throws(
       () =>
-        createPageReader("x", {
+        createPager("x", {
           backward: true,
           useWorker: true,
         }),

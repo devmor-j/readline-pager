@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { suite, test } from "node:test";
-import { createPageReader } from "../dist/main.js";
+import { createPager } from "../dist/main.js";
 import { createTmpFile, tryDeleteFile } from "./utils.ts";
 
 suite("backward", () => {
@@ -10,7 +10,7 @@ suite("backward", () => {
 
     const filepath = await createTmpFile(content, { filename: "backward.txt" });
 
-    const reader = createPageReader(filepath, {
+    const pager = createPager(filepath, {
       pageSize: 2,
       backward: true,
     });
@@ -18,7 +18,7 @@ suite("backward", () => {
     try {
       const result: string[] = [];
 
-      for await (const page of reader) {
+      for await (const page of pager) {
         result.push(...page);
       }
 

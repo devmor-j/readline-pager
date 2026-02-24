@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { suite, test } from "node:test";
-import { createPageReader } from "../dist/main.js";
+import { createPager } from "../dist/main.js";
 import { createTextLines, createTmpFile, tryDeleteFile } from "./utils.ts";
 
 suite("prefetch", () => {
@@ -8,7 +8,7 @@ suite("prefetch", () => {
     const content = createTextLines(3_000);
     const filepath = await createTmpFile(content, { filename: "prefetch.txt" });
 
-    const reader = createPageReader(filepath, {
+    const pager = createPager(filepath, {
       pageSize: 1_000,
       prefetch: 3,
     });
@@ -16,7 +16,7 @@ suite("prefetch", () => {
     try {
       let total = 0;
 
-      for await (const page of reader) {
+      for await (const page of pager) {
         total += page.length;
       }
 
