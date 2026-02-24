@@ -12,14 +12,13 @@ export interface CreateTmpFileOptions {
 
 await mkdir(TMP_DIR, { recursive: true });
 
-// TODO: make filename optional and turn to object arg
 export async function createTmpFile(
   content: string,
   {
     filename = randomUUID(),
     append = false,
     encoding = "utf8",
-  }: CreateTmpFileOptions,
+  }: CreateTmpFileOptions = {},
 ): Promise<string> {
   const filepath = join(TMP_DIR, filename);
 

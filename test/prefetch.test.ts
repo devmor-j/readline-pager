@@ -4,23 +4,28 @@ import { createPager } from "../dist/main.js";
 import { createTextLines, createTmpFile, tryDeleteFile } from "./utils.ts";
 
 suite("prefetch", () => {
-  test("it does not affect correctness", async () => {
-    const content = createTextLines(3_000);
-    const filepath = await createTmpFile(content, { filename: "prefetch.txt" });
+  test("prefetch > 1 does not affect correctness", async () => {
+    const content = createTextLines(5_000);
+    const filepath = await createTmpFile(content, {
+      filename: "prefetch-buffering.txt",
+    });
 
     const pager = createPager(filepath, {
-      pageSize: 1_000,
+      pageSize: 500,
       prefetch: 3,
     });
 
     try {
       let total = 0;
+      let pages = 0;
 
       for await (const page of pager) {
         total += page.length;
+        pages++;
       }
 
-      assert.equal(total, 3_000);
+      assert.equal(total, 5_000);
+      assert.equal(pages, 10);
     } finally {
       await tryDeleteFile(filepath);
     }

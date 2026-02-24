@@ -26,6 +26,31 @@ suite("worker mode", () => {
     }
   });
 
+  test("close() stops worker and prevents further pages", async () => {
+    const content = createTextLines(10_000);
+    const filepath = await createTmpFile(content, {
+      filename: "worker-close-early.txt",
+    });
+
+    const pager = createPager(filepath, {
+      pageSize: 1000,
+      useWorker: true,
+    });
+
+    try {
+      const first = await pager.next();
+      assert.ok(first);
+      assert.equal(first?.length, 1000);
+
+      pager.close();
+
+      const afterClose = await pager.next();
+      assert.equal(afterClose, null);
+    } finally {
+      await tryDeleteFile(filepath);
+    }
+  });
+
   test("it throws when used with backward reading", () => {
     assert.throws(
       () =>

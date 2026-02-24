@@ -25,4 +25,30 @@ suite("delimiter", () => {
       await tryDeleteFile(filepath);
     }
   });
+
+  test("supports multi-character delimiters like CRLF", async () => {
+    const lines = ["one", "two", "three"];
+    const content = lines.join("\r\n");
+
+    const filepath = await createTmpFile(content, {
+      filename: "multibyte-delimiter.txt",
+    });
+
+    const pager = createPager(filepath, {
+      pageSize: 2,
+      delimiter: "\r\n",
+    });
+
+    try {
+      const result: string[] = [];
+
+      for await (const page of pager) {
+        result.push(...page);
+      }
+
+      assert.deepEqual(result, lines);
+    } finally {
+      await tryDeleteFile(filepath);
+    }
+  });
 });

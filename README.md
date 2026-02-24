@@ -6,11 +6,10 @@ Memory-efficient, paginated file reader for Node.js with async iteration, prefet
 
 - ✅ Zero dependencies
 - ✅ Async iterator support (`for await...of`)
-- ✅ Forward and backward reading (read from EOF → BOF)
+- ✅ Forward & backward reading (read from EOF → BOF)
 - ✅ Optional worker thread mode (forward only)
-- ✅ Fully typed (TypeScript)
-- ✅ ~95% test coverage
-- ✅ ~2.5× faster than vanilla Node.js `readline`
+- ✅ Up to ~3× faster than vanilla Node.js `readline`
+- ✅ ~97% test coverage & Fully typed (TypeScript)
 
 ---
 
