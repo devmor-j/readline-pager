@@ -12,7 +12,6 @@ Thanks for your interest in contributing.
 
 ```bash
 npm ci
-npm run build
 npm test
 ```
 

@@ -1,16 +1,24 @@
 # 📄 readline-pager
 
-<p align="center"><img src="logo.webp" alt="logo" width="349"></p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/devmor-j/readline-pager/main/logo.webp" alt="logo" width="349">
+</p>
 
-Memory-efficient, paginated file reader for Node.js with async iteration, prefetching, backward reading and optional worker support.
+<p align="center">
+  <a href="https://www.npmjs.com/package/readline-pager">
+    <img src="https://img.shields.io/npm/v/readline-pager?color=brightgreen" alt="version">
+  </a>
+  <img src="https://img.shields.io/npm/dw/readline-pager" alt="downloads">
+  <img src="https://img.shields.io/github/stars/devmor-j/readline-pager" alt="stars">
+</p>
 
-`readline-pager` reads large text files page-by-page without loading the entire file into memory.
+⚡ Memory-efficient, paginated file reader for Node.js with async iteration, prefetching, backward reading and optional worker support. `readline-pager` reads large text files page-by-page without loading the entire file into memory.
 
 - ✅ Zero dependencies
 - ✅ Async iterator (`for await...of`) + manual `next()` API
 - ✅ Forward & backward reading (EOF → BOF)
 - ✅ Optional worker thread mode (forward only)
-- ✅ Up to ~3× faster than Node.js `readline`
+- ✅ Up to ~3x faster than Node.js `readline`
 - ✅ ~97% test coverage & fully typed (TypeScript)
 
 > **Important:**
