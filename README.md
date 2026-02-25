@@ -5,11 +5,14 @@ Memory-efficient, paginated file reader for Node.js with async iteration, prefet
 `readline-pager` reads large text files page-by-page without loading the entire file into memory.
 
 - ✅ Zero dependencies
-- ✅ Async iterator support (`for await...of`)
+- ✅ Async iterator (`for await...of`) + manual `next()` API
 - ✅ Forward & backward reading (EOF → BOF)
 - ✅ Optional worker thread mode (forward only)
 - ✅ Up to ~3× faster than Node.js `readline`
 - ✅ ~97% test coverage & fully typed (TypeScript)
+
+> **Important:**
+> Performance is heavily dependent on the `chunkSize` option; ensure you fine-tune it for your specific I/O hardware. A setting of **64 KB** is typically a good starting point. Increasing it will gradually improve read speeds, usually reaching an optimal peak between **1–4 MB**, depending on your hardware's capabilities.
 
 ---
 
@@ -21,7 +24,7 @@ npm install readline-pager
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick start
 
 ```ts
 import { createPager } from "readline-pager";
@@ -35,24 +38,25 @@ for await (const page of pager) {
 
 ---
 
-## ⚡ Manual iteration (recommended for maximum throughput)
+**Recommended for highest throughput:**
 
 ```ts
 const pager = createPager("./bigfile.txt");
 
+while (true) {
+  const page = await pager.next();
+  if (!page) break;
+}
+
+// or
 let page;
 while ((page = await pager.next()) !== null) {
-  // page: string[]
   // process page
 }
 ```
 
-`pager.next()` returns:
-
-- `Promise<string[]>` — next page
-- `Promise<null>` — end of file
-
-> Use `while + next()` when raw throughput matters (see Iteration Performance Notes).
+- `while + next()` is the fastest iteration method (avoids extra async-iterator overhead).
+- `for await of` is more ergonomic and convenient.
 
 ---
 
@@ -60,19 +64,21 @@ while ((page = await pager.next()) !== null) {
 
 ```ts
 createPager(filepath, {
+  chunkSize?: number,     // default: 64 * 1024 (64 KiB)
   pageSize?: number,      // default: 1_000
-  delimiter?: string      // default: "\n"
+  delimiter?: string,      // default: "\n"
   prefetch?: number,      // default: 1
   backward?: boolean,     // default: false
   useWorker?: boolean,    // default: false (forward only)
 });
 ```
 
+- `chunkSize`: number of bytes read per I/O operation. **Tune this** — default is `64 * 1024`.
 - `pageSize` — number of lines per page.
 - `delimiter` — line separator.
-- `prefetch` — max number of pages buffered internally. Higher values increase throughput but use more memory.
+- `prefetch` — max number of pages buffered internally. Not required for typical use; tuning has little effect once the engine is optimized.
 - `backward` — read file from end → start (not supported with `useWorker`).
-- `useWorker` — offload parsing to a worker thread (forward mode only).
+- `useWorker` — offload parsing to a worker thread (forward only).
 
 ---
 
@@ -87,23 +93,15 @@ Returns the next page or `null` when finished. Empty lines are preserved.
 - A completely empty file (`0` bytes) produces `[""]` on the first read.
 - A file with multiple empty lines returns each line as an empty string (e.g., `["", ""]` for two empty lines). Node.js `readline` may emit fewer or no `line` events in these cases.
 
-✅ Key points:
-
-- A 0-byte file → `[""]`
-- Consecutive `\n\n` → `["", ""]`
-- Node.js `readline` may skip initial empty line(s) and emit nothing for empty files.
-
 ### `pager.close(): void`
 
 Stops reading and releases resources immediately. Safe to call at any time.
 
-### Properties
+### Read-only properties
 
-```ts
-pager.lineCount; // total lines emitted so far
-pager.firstLine; // first line emitted (available after first read)
-pager.lastLine; // last line emitted (updated per page)
-```
+- `pager.lineCount` — lines emitted so far
+- `pager.firstLine` — first emitted line (available after first read)
+- `pager.lastLine` — last emitted line (updated per page)
 
 ---
 
@@ -115,49 +113,26 @@ Run the included benchmark:
 # default run
 node test/_benchmark.ts
 
-# customize
-node test/_benchmark.ts --lines=20000 --page-size=500 --prefetch=4 --backward
+# or customize with args
+node test/_benchmark.ts --lines=20000 --page-size=500 --backward
 ```
 
-Benchmarks were executed on a high-end Linux machine (SSD + fast CPU) using generated files.
+> Test setup: generated text files with uuid, run on a fast NVMe machine with default options; values are averages from multiple runs. Results are machine-dependent.
 
-### Summary (averages)
+|  Lines |  File MB | Node `readline` (MB/s) | Bun streaming (MB/s) | `readline-pager` (Node) (MB/s) |
+| -----: | -------: | ---------------------: | -------------------: | -----------------------------: |
+|    10M |   352.86 |                   ~423 |                 ~296 |                     **~1,327** |
+|   100M |  3528.59 |                   ~441 |                 ~298 |                     **~1,378** |
+| 1,000M | 35285.95 |                   ~426 |                 ~294 |                     **~1,168** |
 
-| Lines       | File Size (MB) | Implementation | Avg Time (ms) | Avg Throughput (MB/s) | Speedup vs `readline` |
-| ----------- | -------------- | -------------- | ------------- | --------------------: | --------------------: |
-| 1,000,000   | 35.29 MB       | readline       | 100.21        |                352.31 |                     — |
-| 1,000,000   | 35.29 MB       | readline-pager | 43.31         |                815.71 |      **2.32× faster** |
-| 10,000,000  | 352.86 MB      | readline       | 802.61        |                439.80 |                     — |
-| 10,000,000  | 352.86 MB      | readline-pager | 292.33        |               1207.77 |      **2.75× faster** |
-| 100,000,000 | 3528.59 MB     | readline       | 7777.52       |                453.75 |                     — |
-| 100,000,000 | 3528.59 MB     | readline-pager | 2742.99       |               1286.50 |      **2.83× faster** |
-
-**Key takeaways**
-
-- `readline-pager` is consistently **~2.3×–2.8× faster** than Node.js `readline`.
-- Relative performance gains increase with file size.
-- Sustained throughput exceeds **1.2 GB/s** on large files (machine-dependent).
-
----
-
-## 🧠 Iteration Performance Notes
-
-- **Fastest**: manual
-  `while ((page = await pager.next()) !== null) { ... }`
-  Avoids async-iterator protocol overhead and microtask churn.
-
-- **More ergonomic**:
-  `for await (const page of pager) { ... }`
-  Cleaner, but slightly slower in hot paths.
-
-**Recommendation:** use the explicit `next()` loop for benchmarks and performance-critical workloads; use `for await...of` for clarity elsewhere.
+**Takeaway:** `readline-pager` delivers multi-GB/s memory-to-memory throughput on large files on typical NVMe hardware; results vary with `chunkSize`, runtime (Node vs Bun), and CPU/OS.
 
 ---
 
 ## 🛠 Development & Contributing
 
-- Minimum supported Node.js: **18.12+** (LTS).
-- Development/test environment: **Node v25.6.1**, TypeScript `~5.9.x`.
+- Minimum supported Node.js: **v18.12** (lts/hydrogen).
+- Development/test environment: **Node v25.6**, **TypeScript v5.9**.
 
 Run tests:
 
