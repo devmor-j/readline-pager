@@ -42,4 +42,6 @@ export function createPager(
         });
 }
 
+export default createPager;
+
 export type * from "./types.js";

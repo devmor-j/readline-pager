@@ -38,6 +38,7 @@ npm install readline-pager
 
 ```ts
 import { createPager } from "readline-pager";
+// const { createPager } = require("readline-pager");
 
 const pager = createPager("./bigfile.txt");
 
@@ -51,8 +52,6 @@ for await (const page of pager) {
 **Recommended for highest throughput:**
 
 ```ts
-const pager = createPager("./bigfile.txt");
-
 while (true) {
   const page = await pager.next();
   if (!page) break;
@@ -60,9 +59,7 @@ while (true) {
 
 // or
 let page;
-while ((page = await pager.next()) !== null) {
-  // process page
-}
+while ((page = await pager.next()) !== null) {}
 ```
 
 - `while + next()` is the fastest iteration method (avoids extra async-iterator overhead).
@@ -76,14 +73,14 @@ while ((page = await pager.next()) !== null) {
 createPager(filepath, {
   chunkSize?: number,     // default: 64 * 1024 (64 KiB)
   pageSize?: number,      // default: 1_000
-  delimiter?: string,      // default: "\n"
+  delimiter?: string,     // default: "\n"
   prefetch?: number,      // default: 1
   backward?: boolean,     // default: false
   useWorker?: boolean,    // default: false (forward only)
 });
 ```
 
-- `chunkSize`: number of bytes read per I/O operation. **Tune this** — default is `64 * 1024`.
+- `chunkSize` — number of bytes read per I/O operation.
 - `pageSize` — number of lines per page.
 - `delimiter` — line separator.
 - `prefetch` — max number of pages buffered internally. Not required for typical use; tuning has little effect once the engine is optimized.
@@ -135,14 +132,14 @@ node test/_benchmark.ts --lines=20000 --page-size=500 --backward
 |   100M |  3528.59 |                   ~441 |                 ~298 |                     **~1,378** |
 | 1,000M | 35285.95 |                   ~426 |                 ~294 |                     **~1,168** |
 
-**Takeaway:** `readline-pager` delivers multi-GB/s memory-to-memory throughput on large files on typical NVMe hardware; results vary with `chunkSize`, runtime (Node vs Bun), and CPU/OS.
+**Runtime Environment:** Node.js v25.6.1 & Bun v1.3.9
 
 ---
 
 ## 🛠 Development & Contributing
 
-- Minimum supported Node.js: **v18.12** (lts/hydrogen).
-- Development/test environment: **Node v25.6**, **TypeScript v5.9**.
+- Minimum supported Node.js: **v18.12 (lts/hydrogen)**.
+- Development/test environment: **Node v25.6 & TypeScript v5.9**.
 
 Run tests:
 
