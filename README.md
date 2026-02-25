@@ -1,5 +1,7 @@
 # 📄 readline-pager
 
+<p align="center"><img src="logo.webp" alt="logo" width="349"></p>
+
 Memory-efficient, paginated file reader for Node.js with async iteration, prefetching, backward reading, and optional worker support.
 
 `readline-pager` reads large text files page-by-page without loading the entire file into memory.
@@ -12,7 +14,7 @@ Memory-efficient, paginated file reader for Node.js with async iteration, prefet
 - ✅ ~97% test coverage & fully typed (TypeScript)
 
 > **Important:**
-> Performance is heavily dependent on the `chunkSize` option; ensure you fine-tune it for your specific I/O hardware. A setting of **64 KB** is typically a good starting point. Increasing it will gradually improve read speeds, usually reaching an optimal peak between **1–4 MB**, depending on your hardware's capabilities.
+> Performance is heavily dependent on the `chunkSize` option; ensure you fine-tune it for your specific I/O hardware. A setting of **64 KB** is typically a good starting point. Increasing it might gradually improve read speeds, usually reaching an optimal peak depending on your hardware's capabilities.
 
 ---
 
