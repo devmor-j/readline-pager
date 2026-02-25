@@ -1,8 +1,7 @@
 import { open } from "node:fs/promises";
 import { parentPort, workerData } from "node:worker_threads";
-import { CHUNK_SIZE } from "./constants.js";
 
-const { filepath, pageSize, delimiter } = workerData;
+const { filepath, chunkSize, pageSize, delimiter } = workerData;
 
 (async () => {
   const fd = await open(filepath, "r");
@@ -13,7 +12,7 @@ const { filepath, pageSize, delimiter } = workerData;
   const local: string[] = [];
 
   while (pos < size) {
-    const readSize = Math.min(CHUNK_SIZE, size - pos);
+    const readSize = Math.min(chunkSize, size - pos);
     const buf = Buffer.allocUnsafe(readSize);
     const { bytesRead } = await fd.read(buf, 0, readSize, pos);
     pos += bytesRead;

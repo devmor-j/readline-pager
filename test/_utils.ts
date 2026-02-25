@@ -7,7 +7,6 @@ const TMP_DIR = "./tmp";
 export interface CreateTmpFileOptions {
   filename?: string;
   append?: boolean;
-  encoding?: BufferEncoding;
 }
 
 await mkdir(TMP_DIR, { recursive: true });

@@ -13,13 +13,14 @@ export function createWorkerReader(
   options: ReaderOptions,
 ): Pager {
   const {
+    chunkSize,
     pageSize,
     delimiter,
     prefetch, // TODO: design prefetch logic for workers
   } = options;
 
   const worker = new Worker(new URL(workerFile, import.meta.url), {
-    workerData: { filepath, pageSize, delimiter },
+    workerData: { filepath, chunkSize, pageSize, delimiter },
   });
 
   const pageQueue = createPageQueue();

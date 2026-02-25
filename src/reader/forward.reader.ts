@@ -1,5 +1,4 @@
 import { FileHandle, open } from "node:fs/promises";
-import { CHUNK_SIZE, ENCODING } from "../constants.js";
 import { createPageQueue } from "../queue.js";
 import type { Pager, ReaderOptions } from "../types.js";
 
@@ -7,7 +6,7 @@ export function createForwardReader(
   filepath: string,
   options: ReaderOptions,
 ): Pager {
-  const { pageSize, delimiter, prefetch } = options;
+  const { chunkSize, pageSize, delimiter, prefetch } = options;
 
   const pageQueue = createPageQueue();
 
@@ -37,12 +36,12 @@ export function createForwardReader(
     if (!fd) return;
 
     while (pageQueue.queue.length < prefetch && pos < size) {
-      const readSize = Math.min(CHUNK_SIZE, size - pos);
+      const readSize = Math.min(chunkSize, size - pos);
       const buf = Buffer.allocUnsafe(readSize);
       const { bytesRead } = await fd.read(buf, 0, readSize, pos);
       pos += bytesRead;
 
-      buffer += buf.toString(ENCODING, 0, bytesRead);
+      buffer += buf.toString("utf8", 0, bytesRead);
 
       let idx: number;
       while ((idx = buffer.indexOf(delimiter)) !== -1) {

@@ -7,6 +7,7 @@ import { createTextLines, createTmpFile, tryDeleteFile } from "./_utils.ts";
 
 interface BenchmarkArgs {
   lines?: number;
+  "chunk-size"?: number;
   "page-size"?: number;
   backward?: boolean;
   prefetch?: number;
@@ -49,6 +50,7 @@ function parseProcessArgv(): BenchmarkArgs {
 
     switch (key) {
       case "lines":
+      case "chunk-size":
       case "page-size":
       case "prefetch": {
         if (value !== undefined) {
@@ -73,6 +75,7 @@ function parseProcessArgv(): BenchmarkArgs {
 
 async function benchmark(args: BenchmarkArgs = {}) {
   const LINES = args.lines ?? 1e6;
+  const CHUNK_SIZE = args["chunk-size"] ?? 120 * 1_024;
   const PAGE_SIZE = args["page-size"] ?? 1e3;
   const BACKWARD = args.backward ?? false;
   const PREFETCH = args.prefetch ?? 1;
@@ -129,6 +132,7 @@ async function benchmark(args: BenchmarkArgs = {}) {
   TIME.readline.end = process.hrtime.bigint();
 
   const pager = createPager(filepath, {
+    chunkSize: CHUNK_SIZE,
     pageSize: PAGE_SIZE,
     backward: BACKWARD,
     prefetch: PREFETCH,

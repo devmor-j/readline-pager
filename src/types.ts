@@ -1,4 +1,5 @@
 export interface ReaderOptions {
+  chunkSize: number;
   pageSize: number;
   delimiter: string;
   prefetch: number;

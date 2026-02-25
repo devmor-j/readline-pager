@@ -10,6 +10,7 @@ export function createPager(
   options: PagerOptions = {},
 ): Pager {
   const {
+    chunkSize = 64 * 1_024,
     pageSize = 1_000,
     delimiter = "\n",
     prefetch = 1,
@@ -25,10 +26,20 @@ export function createPager(
     throw new Error("backward not supported with useWorker");
 
   return useWorker
-    ? createWorkerReader(filepath, { pageSize, prefetch, delimiter })
+    ? createWorkerReader(filepath, { chunkSize, pageSize, prefetch, delimiter })
     : backward
-      ? createBackwardReader(filepath, { pageSize, prefetch, delimiter })
-      : createForwardReader(filepath, { pageSize, prefetch, delimiter });
+      ? createBackwardReader(filepath, {
+          chunkSize,
+          pageSize,
+          prefetch,
+          delimiter,
+        })
+      : createForwardReader(filepath, {
+          chunkSize,
+          pageSize,
+          prefetch,
+          delimiter,
+        });
 }
 
 export type * from "./types.js";
