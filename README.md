@@ -2,7 +2,7 @@
 
 <p align="center"><img src="logo.webp" alt="logo" width="349"></p>
 
-Memory-efficient, paginated file reader for Node.js with async iteration, prefetching, backward reading, and optional worker support.
+Memory-efficient, paginated file reader for Node.js with async iteration, prefetching, backward reading and optional worker support.
 
 `readline-pager` reads large text files page-by-page without loading the entire file into memory.
 
