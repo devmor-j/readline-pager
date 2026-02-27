@@ -119,6 +119,16 @@ export async function createBigTmpFile(
   let isFirstWrite = true;
   let filepath = "";
 
+  if (autoDelete) {
+    const cleanupSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
+    cleanupSignals.forEach((signal) => {
+      process.on(signal, async () => {
+        await tryDeleteFile(filepath);
+        process.exit(0);
+      });
+    });
+  }
+
   while (remainingLines > 0) {
     const chunkSize = Math.min(remainingLines, MAX_WRITABLE_LINES);
     remainingLines -= chunkSize;
@@ -137,17 +147,9 @@ export async function createBigTmpFile(
     );
   }
 
-  const { size: filebytes } = await stat(filepath);
+  process.stdout.write("\r\x1b[2K");
 
-  if (autoDelete) {
-    const cleanupSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
-    cleanupSignals.forEach((signal) => {
-      process.on(signal, async () => {
-        await tryDeleteFile(filepath);
-        process.exit(0);
-      });
-    });
-  }
+  const { size: filebytes } = await stat(filepath);
 
   return { filebytes, filepath };
 }
@@ -164,6 +166,14 @@ export function logThroughput(
   const throughput = fileMB / seconds;
 
   console.log(
-    `🚀 [${name}] Read ${fileMB.toFixed(2)} MB in ${elapsedMS.toFixed(2)} ms ==> Throughput: ${throughput.toFixed(2)} MB/s`,
+    `🚀 [${name}] ${elapsedMS.toFixed(2)} ms ==> Throughput: [33m[${throughput.toFixed(2)} MB/s][0m`,
   );
+}
+
+export function whatRuntime() {
+  return typeof Bun !== "undefined"
+    ? "Bun"
+    : typeof Deno !== "undefined"
+      ? "Deno"
+      : "Node";
 }

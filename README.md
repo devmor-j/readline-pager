@@ -118,21 +118,39 @@ Run the included benchmark:
 
 ```bash
 # default run
-node test/_benchmark.ts
+npm run benchmark
 
 # or customize with args
 node test/_benchmark.ts --lines=20000 --page-size=500 --backward
 ```
 
 > Test setup: generated text files with uuid, run on a fast NVMe machine with default options; values are averages from multiple runs. Results are machine-dependent.
+>
+> The **Average Throughput (MB/s)** is computed for two strategies: reading files line by line and page by page.
+>
+> In addition to _Node_, the two other popular JavaScript runtimes were also tested with `readline-pager`.
 
-|  Lines |  File MB | Node `readline` (MB/s) | Bun streaming (MB/s) | `readline-pager` (Node) (MB/s) |
-| -----: | -------: | ---------------------: | -------------------: | -----------------------------: |
-|    10M |   352.86 |                   ~423 |                 ~296 |                     **~1,327** |
-|   100M |  3528.59 |                   ~441 |                 ~298 |                     **~1,378** |
-| 1,000M | 35285.95 |                   ~426 |                 ~294 |                     **~1,168** |
+### Line by line
 
-**Runtime Environment:** Node.js v25.6.1 & Bun v1.3.9
+| Runtime / Method | 1M lines (35 MB) | 10M lines (353 MB) | 100M lines (3,529 MB) | 1,000M lines (35,286 MB) |
+| ---------------- | ---------------: | -----------------: | --------------------: | -----------------------: |
+| Node — node:line |              369 |                435 |                   455 |                      455 |
+| Deno — node:line |              203 |                230 |                   230 |                      229 |
+| Deno — deno:line |              738 |                901 |                   915 |                      809 |
+| Bun — node:line  |              246 |                279 |                   283 |                      280 |
+| Bun — bun:line   |              938 |              1,540 |                 1,668 |                    1,315 |
+
+### Page by page
+
+| Runtime / Method      | 1M lines (35 MB) | 10M lines (353 MB) | 100M lines (3,529 MB) | 1,000M lines (35,286 MB) |
+| --------------------- | ---------------: | -----------------: | --------------------: | -----------------------: |
+| Node — readline-pager |            1,053 |              1,311 |                 1,278 |                      936 |
+| Deno — deno:page      |              852 |                909 |                   908 |                      783 |
+| Deno — readline-pager |            1,131 |              1,268 |                 1,271 |                      911 |
+| Bun — bun:page        |              411 |                440 |                   449 |                      428 |
+| Bun — readline-pager  |              827 |              1,021 |                 1,040 |                      804 |
+
+**Runtime Environment:** Node.js v25.6.1 & Bun v1.3.9 & Deno 2.6.10
 
 ---
 

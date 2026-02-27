@@ -5,10 +5,12 @@
     "build": "tsdown",
     "pretest": "npm run build",
     "test": "node --test --experimental-test-coverage test/**/*.test.ts",
-    "prepublishOnly": "npm run build && npm run test"
+    "prepublishOnly": "npm run build && npm run test",
+    "benchmark": "node test/_benchmark.ts; bun test/_benchmark.ts; deno --allow-write --allow-read test/_benchmark.ts"
   },
   "devDependencies": {
     "@types/bun": "~1.3.9",
+    "@types/deno": "~2.5.0",
     "@types/node": "~25.3.0",
     "prettier": "~3.8.1",
     "prettier-plugin-organize-imports": "~4.3.0",
