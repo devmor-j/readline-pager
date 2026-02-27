@@ -100,7 +100,7 @@ Returns the next page or `null` when finished. Empty lines are preserved.
 - A completely empty file (`0` bytes) produces `[""]` on the first read.
 - A file with multiple empty lines returns each line as an empty string (e.g., `["", ""]` for two empty lines). Node.js `readline` may emit fewer or no `line` events in these cases.
 
-### `pager.close(): void`
+### `pager.close(): Promise<void>`
 
 Stops reading and releases resources immediately. Safe to call at any time.
 

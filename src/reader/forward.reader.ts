@@ -92,7 +92,11 @@ export function createForwardReader(
     closed = true;
     done = true;
     pageQueue.queue.length = 0;
-    if (fd) await fd.close();
+
+    if (fd) {
+      await fd.close();
+      fd = null;
+    }
   }
 
   return {
@@ -108,10 +112,14 @@ export function createForwardReader(
       return lastLine;
     },
     async *[Symbol.asyncIterator]() {
-      while (true) {
-        const p = await next();
-        if (!p) break;
-        yield p;
+      try {
+        while (true) {
+          const p = await next();
+          if (!p) break;
+          yield p;
+        }
+      } finally {
+        await close();
       }
     },
   };

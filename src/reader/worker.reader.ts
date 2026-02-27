@@ -2,6 +2,7 @@ import { Worker } from "node:worker_threads";
 import { createPageQueue } from "../queue.js";
 import type { Pager, ReaderOptions } from "../types.js";
 
+// TODO: refactor with better technique
 const isESM = typeof import.meta !== "undefined";
 
 const workerFile = isESM
@@ -56,7 +57,8 @@ export function createWorkerReader(
   async function close() {
     closed = true;
     done = true;
-    worker.terminate();
+
+    await worker.terminate();
   }
 
   return {
@@ -72,10 +74,14 @@ export function createWorkerReader(
       return lastLine;
     },
     async *[Symbol.asyncIterator]() {
-      while (true) {
-        const p = await next();
-        if (!p) break;
-        yield p;
+      try {
+        while (true) {
+          const p = await next();
+          if (!p) break;
+          yield p;
+        }
+      } finally {
+        await close();
       }
     },
   };

@@ -12,7 +12,7 @@ export interface PagerOptions extends Partial<ReaderOptions> {
 
 export interface Pager extends AsyncIterable<string[]> {
   next(): Promise<string[] | null>;
-  close(): void;
+  close(): Promise<void>;
   readonly lineCount: number;
   readonly firstLine: string | null;
   readonly lastLine: string | null;

@@ -66,7 +66,7 @@ suite("worker mode", () => {
       assert.ok(first);
       assert.equal(first?.length, 1000);
 
-      pager.close();
+      await pager.close();
 
       const afterClose = await pager.next();
       assert.equal(afterClose, null);

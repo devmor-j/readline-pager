@@ -16,7 +16,7 @@ suite("close", () => {
       const first = await pager.next();
       assert.ok(first);
 
-      pager.close();
+      await pager.close();
 
       const next = await pager.next();
       assert.equal(next, null);
