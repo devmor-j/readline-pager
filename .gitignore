@@ -8,3 +8,5 @@ benchmark_*.txt
 .DS_Store
 .vscode
 .cache
+build
+prebuilds

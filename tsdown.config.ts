@@ -7,4 +7,5 @@ export default defineConfig({
   format: ["esm", "cjs"],
   clean: true,
   dts: true,
+  external: [/\.node$/],
 });
