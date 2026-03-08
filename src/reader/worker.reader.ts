@@ -28,14 +28,12 @@ export function createWorkerReader(
 
   let done = false;
   let closed = false;
-  let emittedCount = 0;
-  let firstLine: string | null = null;
-  let lastLine: string | null = null;
 
   worker.on("message", (msg: any) => {
     if (msg.type === "page") {
       pageQueue.push(msg.data);
     }
+
     if (msg.type === "done") {
       done = true;
       pageQueue.wake();
@@ -44,12 +42,9 @@ export function createWorkerReader(
 
   async function next() {
     if (closed) return null;
+
     const page = await pageQueue.shift(() => done);
     if (!page) return null;
-    emittedCount += page.length;
-
-    firstLine ??= page[0];
-    lastLine = page[page.length - 1];
 
     return page;
   }
@@ -64,15 +59,6 @@ export function createWorkerReader(
   return {
     next,
     close,
-    get lineCount() {
-      return emittedCount;
-    },
-    get firstLine() {
-      return firstLine;
-    },
-    get lastLine() {
-      return lastLine;
-    },
     async *[Symbol.asyncIterator]() {
       try {
         while (true) {

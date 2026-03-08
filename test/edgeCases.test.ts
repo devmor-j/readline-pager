@@ -18,9 +18,9 @@ suite("edge cases", () => {
 
       const lastPage = await pager.next();
       assert.equal(lastPage, null);
-      assert.equal(pager.lineCount, 1);
-      assert.equal(pager.firstLine, "");
-      assert.equal(pager.lastLine, "");
+      assert.equal(firstPage?.length, 1);
+      assert.equal(firstPage?.at(0), "");
+      assert.equal(firstPage?.at(-1), "");
     } finally {
       await tryDeleteFile(filepath);
     }
@@ -36,12 +36,15 @@ suite("edge cases", () => {
 
     try {
       const pages: string[] = [];
-      for await (const p of pager) pages.push(...p);
+
+      for await (const p of pager) {
+        pages.push(...p);
+      }
 
       assert.deepEqual(pages, ["only-line", ""]);
-      assert.equal(pager.firstLine, "only-line");
-      assert.equal(pager.lastLine, "");
-      assert.equal(pager.lineCount, 2);
+      assert.equal(pages?.length, 2);
+      assert.equal(pages?.at(0), "only-line");
+      assert.equal(pages?.at(-1), "");
     } finally {
       await tryDeleteFile(filepath);
     }
@@ -62,7 +65,7 @@ suite("edge cases", () => {
       }
 
       assert.deepEqual(lines, ["a", "b", "c"]);
-      assert.equal(pager.lineCount, 3);
+      assert.equal(lines.length, 3);
     } finally {
       await tryDeleteFile(filepath);
     }

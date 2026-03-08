@@ -9,6 +9,7 @@ export function createForwardReader(
   const { chunkSize, pageSize, delimiter, prefetch } = options;
 
   const pageQueue = createPageQueue();
+  const local: string[] = [];
 
   let fd: FileHandle | null = null;
   let pos = 0;
@@ -16,12 +17,6 @@ export function createForwardReader(
   let buffer = "";
   let done = false;
   let closed = false;
-
-  let emittedCount = 0;
-  let firstLine: string | null = null;
-  let lastLine: string | null = null;
-
-  const local: string[] = [];
 
   async function init() {
     if (fd) return;
@@ -56,7 +51,6 @@ export function createForwardReader(
     }
 
     if (pos >= size) {
-      // Split remaining buffer; every split counts, even empty strings
       const parts = buffer.length > 0 ? buffer.split(delimiter) : [""];
       for (const line of parts) {
         local.push(line);
@@ -78,12 +72,9 @@ export function createForwardReader(
   async function next() {
     if (closed) return null;
     await fill();
+
     const page = await pageQueue.shift(() => done);
     if (!page) return null;
-    emittedCount += page.length;
-
-    firstLine ??= page[0];
-    lastLine = page[page.length - 1];
 
     return page;
   }
@@ -102,15 +93,6 @@ export function createForwardReader(
   return {
     next,
     close,
-    get lineCount() {
-      return emittedCount;
-    },
-    get firstLine() {
-      return firstLine;
-    },
-    get lastLine() {
-      return lastLine;
-    },
     async *[Symbol.asyncIterator]() {
       try {
         while (true) {

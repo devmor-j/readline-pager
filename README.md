@@ -104,12 +104,6 @@ Returns the next page or `null` when finished. Empty lines are preserved.
 
 Stops reading and releases resources immediately. Safe to call at any time.
 
-### Read-only properties
-
-- `pager.lineCount` — lines emitted so far
-- `pager.firstLine` — first emitted line (available after first read)
-- `pager.lastLine` — last emitted line (updated per page)
-
 ---
 
 ## 📊 Benchmark

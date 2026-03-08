@@ -9,18 +9,13 @@ export function createBackwardReader(
   const { chunkSize, pageSize, delimiter, prefetch } = options;
 
   const pageQueue = createPageQueue();
+  const local: string[] = [];
 
   let fd: FileHandle | null = null;
   let pos = 0;
   let buffer = "";
   let done = false;
   let closed = false;
-
-  let emittedCount = 0;
-  let firstLine: string | null = null;
-  let lastLine: string | null = null;
-
-  const local: string[] = [];
 
   async function init() {
     if (fd) return;
@@ -77,12 +72,9 @@ export function createBackwardReader(
   async function next() {
     if (closed) return null;
     await fill();
+
     const page = await pageQueue.shift(() => done);
     if (!page) return null;
-    emittedCount += page.length;
-
-    firstLine ??= page[0];
-    lastLine = page[page.length - 1];
 
     return page;
   }
@@ -101,15 +93,6 @@ export function createBackwardReader(
   return {
     next,
     close,
-    get lineCount() {
-      return emittedCount;
-    },
-    get firstLine() {
-      return firstLine;
-    },
-    get lastLine() {
-      return lastLine;
-    },
     async *[Symbol.asyncIterator]() {
       try {
         while (true) {
