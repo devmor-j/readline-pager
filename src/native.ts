@@ -2,20 +2,21 @@ import { createRequire } from "node:module";
 import { arch, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Pager } from "./types.js";
 
 const require = createRequire(import.meta.url);
 
-type PagerHandle = object | null;
-type PagerData = Buffer | null;
+type AddonFD = object | null;
+type AddonData = Buffer | null;
 
-export interface PagerNative {
-  open: (filepath: string, pageSize: number, delimiter: string) => PagerHandle;
-  next: (fd: PagerHandle) => Promise<PagerData>;
-  nextSync: (fd: PagerHandle) => PagerData;
-  close: (fd: PagerHandle) => void;
+interface NativeAddon {
+  open: (filepath: string, pageSize: number, delimiter: string) => AddonFD;
+  next: (fd: AddonFD) => Promise<AddonData>;
+  nextSync: (fd: AddonFD) => AddonData;
+  close: (fd: AddonFD) => Promise<void>;
 }
 
-function loadNativeAddon(): PagerNative {
+function loadNativeAddon(): NativeAddon {
   const p = platform();
   const a = arch();
 
@@ -45,33 +46,45 @@ function loadNativeAddon(): PagerNative {
 export function createNativePager(
   filepath: string,
   { pageSize = 1_000, delimiter = "\n" } = {},
-) {
+): Pager {
   const pagerNative = loadNativeAddon();
 
-  let fd: PagerHandle = null;
+  let fd: AddonFD = null;
   let closed = false;
 
   const init = () => {
     fd = pagerNative.open(filepath, pageSize, delimiter);
   };
 
-  const next = () => {
+  const next = async () => {
     if (closed || !fd) return null;
-    return pagerNative.next(fd);
+
+    const data = await pagerNative.next(fd);
+    if (!data) return null;
+
+    return data.toString("utf8").split(delimiter);
   };
 
-  const nextSync = (): PagerData => {
+  const nextSync = () => {
     if (closed || !fd) return null;
-    return pagerNative.nextSync(fd);
+
+    const data = pagerNative.nextSync(fd);
+    if (!data) return null;
+
+    return data.toString("utf8").split(delimiter);
   };
 
-  const close = () => {
-    if (fd && !closed) {
+  const close = async () => {
+    if (!closed || fd) {
       closed = true;
-      pagerNative.close(fd);
+      await pagerNative.close(fd);
       fd = null;
     }
   };
+
+  function tryClose() {
+    void close().catch(() => {});
+  }
 
   init();
 
@@ -82,23 +95,23 @@ export function createNativePager(
     async *[Symbol.asyncIterator]() {
       try {
         while (true) {
-          const buffer = await next();
-          if (!buffer) break;
-          yield buffer;
+          const p = await next();
+          if (!p) break;
+          yield p;
         }
       } finally {
-        close();
+        tryClose();
       }
     },
     *[Symbol.iterator]() {
       try {
         while (true) {
-          const buffer = nextSync();
-          if (!buffer) break;
-          yield buffer;
+          const p = nextSync();
+          if (!p) break;
+          yield p;
         }
       } finally {
-        close();
+        tryClose();
       }
     },
   };

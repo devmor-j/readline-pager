@@ -57,14 +57,14 @@ suite("worker mode", () => {
     });
 
     const pager = createPager(filepath, {
-      pageSize: 1000,
+      pageSize: 1_000,
       useWorker: true,
     });
 
     try {
       const first = await pager.next();
       assert.ok(first);
-      assert.equal(first?.length, 1000);
+      assert.equal(first?.length, 1_000);
 
       await pager.close();
 

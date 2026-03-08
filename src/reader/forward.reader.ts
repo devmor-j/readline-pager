@@ -142,6 +142,7 @@ export function createForwardReader(
     return null;
   }
 
+  // TODO: merge partial closes into close api
   async function close() {
     closed = true;
     done = true;
@@ -158,6 +159,10 @@ export function createForwardReader(
     }
   }
 
+  function tryClose() {
+    void close().catch(() => {});
+  }
+
   return {
     next,
     nextSync,
@@ -170,7 +175,7 @@ export function createForwardReader(
           yield p;
         }
       } finally {
-        await close().catch(() => {});
+        tryClose();
       }
     },
     *[Symbol.iterator]() {
@@ -181,7 +186,7 @@ export function createForwardReader(
           yield p;
         }
       } finally {
-        close().catch(() => {});
+        tryClose();
       }
     },
   };

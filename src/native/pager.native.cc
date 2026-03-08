@@ -392,9 +392,13 @@ static napi_value Close(napi_env env, napi_callback_info info) {
     ps->cv.notify_all();
   }
 
-  napi_value undefined;
-  napi_get_undefined(env, &undefined);
-  return undefined;
+  napi_value promise;
+  napi_deferred deferred;
+  napi_create_promise(env, &deferred, &promise);
+
+  napi_resolve_deferred(env, deferred, nullptr);
+
+  return promise;
 }
 
 static napi_value Init(napi_env env, napi_value exports) {

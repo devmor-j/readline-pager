@@ -58,11 +58,16 @@ export function createWorkerReader(
     return null;
   }
 
+  // TODO: merge partial closes into close api
   async function close() {
     closed = true;
     done = true;
 
     await worker.terminate();
+  }
+
+  function tryClose() {
+    void close().catch(() => {});
   }
 
   return {
@@ -77,7 +82,7 @@ export function createWorkerReader(
           yield p;
         }
       } finally {
-        await close().catch(() => {});
+        tryClose();
       }
     },
     *[Symbol.iterator]() {
@@ -88,7 +93,7 @@ export function createWorkerReader(
           yield p;
         }
       } finally {
-        close().catch(() => {});
+        tryClose();
       }
     },
   };

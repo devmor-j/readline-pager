@@ -143,6 +143,7 @@ export function createBackwardReader(
     return null;
   }
 
+  // TODO: merge partial closes into close api
   async function close() {
     closed = true;
     done = true;
@@ -159,6 +160,10 @@ export function createBackwardReader(
     }
   }
 
+  function tryClose() {
+    void close().catch(() => {});
+  }
+
   return {
     next,
     nextSync,
@@ -171,7 +176,7 @@ export function createBackwardReader(
           yield p;
         }
       } finally {
-        await close().catch(() => {});
+        tryClose();
       }
     },
     *[Symbol.iterator]() {
@@ -182,7 +187,7 @@ export function createBackwardReader(
           yield p;
         }
       } finally {
-        close().catch(() => {});
+        tryClose();
       }
     },
   };
