@@ -127,7 +127,7 @@ static void scan_avx2(std::stop_token stop, PagerState *st) {
       size_t pos = i + offset;
 
       if (++lines >= st->page_lines) {
-        if (!queue_push(st, page_start, pos + 1 - page_start))
+        if (!queue_push(st, page_start, pos - page_start))
           return;
         page_start = pos + 1;
         lines = 0;
@@ -142,7 +142,7 @@ static void scan_avx2(std::stop_token stop, PagerState *st) {
   for (; i < size && !stop.stop_requested(); ++i) {
     if (data[i] == st->delimiter) {
       if (++lines >= st->page_lines) {
-        if (!queue_push(st, page_start, i + 1 - page_start))
+        if (!queue_push(st, page_start, i - page_start))
           return;
         page_start = i + 1;
         lines = 0;
@@ -174,7 +174,7 @@ static void scan_neon(std::stop_token stop, PagerState *st) {
       for (int b = 0; b < 16; ++b) {
         if (data[i + b] == st->delimiter) {
           if (++lines >= st->page_lines) {
-            if (!queue_push(st, page_start, i + b + 1 - page_start))
+            if (!queue_push(st, page_start, i + b - page_start))
               return;
             page_start = i + b + 1;
             lines = 0;
@@ -189,7 +189,7 @@ static void scan_neon(std::stop_token stop, PagerState *st) {
   for (; i < size && !stop.stop_requested(); ++i) {
     if (data[i] == st->delimiter) {
       if (++lines >= st->page_lines) {
-        if (!queue_push(st, page_start, i + 1 - page_start))
+        if (!queue_push(st, page_start, i - page_start))
           return;
         page_start = i + 1;
         lines = 0;
