@@ -49,6 +49,15 @@ export function createWorkerReader(
     return page;
   }
 
+  function nextSync() {
+    if (closed) return null;
+
+    if (pageQueue.queue.length) return pageQueue.queue.shift()!;
+    if (done) return null;
+
+    return null;
+  }
+
   async function close() {
     closed = true;
     done = true;
@@ -58,6 +67,7 @@ export function createWorkerReader(
 
   return {
     next,
+    nextSync,
     close,
     async *[Symbol.asyncIterator]() {
       try {
@@ -67,7 +77,18 @@ export function createWorkerReader(
           yield p;
         }
       } finally {
-        await close();
+        await close().catch(() => {});
+      }
+    },
+    *[Symbol.iterator]() {
+      try {
+        while (true) {
+          const p = nextSync();
+          if (!p) break;
+          yield p;
+        }
+      } finally {
+        close().catch(() => {});
       }
     },
   };

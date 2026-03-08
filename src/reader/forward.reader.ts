@@ -1,3 +1,4 @@
+import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { FileHandle, open } from "node:fs/promises";
 import { createPageQueue } from "../queue.js";
 import type { Pager, ReaderOptions } from "../types.js";
@@ -12,6 +13,7 @@ export function createForwardReader(
   const local: string[] = [];
 
   let fd: FileHandle | null = null;
+  let fdSync: number | null = null;
   let pos = 0;
   let size = 0;
   let buffer = "";
@@ -22,6 +24,13 @@ export function createForwardReader(
     if (fd) return;
     fd = await open(filepath, "r");
     size = (await fd.stat()).size;
+    if (size === 0) done = true;
+  }
+
+  function initSync() {
+    if (fdSync) return;
+    fdSync = openSync(filepath, "r");
+    size = statSync(filepath).size;
     if (size === 0) done = true;
   }
 
@@ -69,6 +78,50 @@ export function createForwardReader(
     }
   }
 
+  function fillSync() {
+    if (done || closed) return;
+    initSync();
+    if (fdSync === null) return;
+
+    while (pageQueue.queue.length < prefetch && pos < size) {
+      const readSize = Math.min(chunkSize, size - pos);
+      const buf = Buffer.allocUnsafe(readSize);
+      const bytesRead = readSync(fdSync, buf, 0, readSize, pos);
+      pos += bytesRead;
+
+      buffer += buf.toString("utf8", 0, bytesRead);
+
+      let idx: number;
+      while ((idx = buffer.indexOf(delimiter)) !== -1) {
+        const line = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + delimiter.length);
+        local.push(line);
+
+        while (local.length >= pageSize) {
+          pageQueue.push(local.splice(0, pageSize));
+        }
+      }
+    }
+
+    if (pos >= size) {
+      const parts = buffer.length > 0 ? buffer.split(delimiter) : [""];
+      for (const line of parts) {
+        local.push(line);
+      }
+      buffer = "";
+
+      while (local.length > 0) {
+        pageQueue.push(local.splice(0, pageSize));
+      }
+
+      done = true;
+      if (fdSync !== null) {
+        closeSync(fdSync);
+        fdSync = null;
+      }
+    }
+  }
+
   async function next() {
     if (closed) return null;
     await fill();
@@ -77,6 +130,16 @@ export function createForwardReader(
     if (!page) return null;
 
     return page;
+  }
+
+  function nextSync() {
+    if (closed) return null;
+    fillSync();
+
+    if (pageQueue.queue.length) return pageQueue.queue.shift()!;
+    if (done) return null;
+
+    return null;
   }
 
   async function close() {
@@ -88,10 +151,16 @@ export function createForwardReader(
       await fd.close();
       fd = null;
     }
+
+    if (fdSync !== null) {
+      closeSync(fdSync);
+      fdSync = null;
+    }
   }
 
   return {
     next,
+    nextSync,
     close,
     async *[Symbol.asyncIterator]() {
       try {
@@ -101,7 +170,18 @@ export function createForwardReader(
           yield p;
         }
       } finally {
-        await close();
+        await close().catch(() => {});
+      }
+    },
+    *[Symbol.iterator]() {
+      try {
+        while (true) {
+          const p = nextSync();
+          if (!p) break;
+          yield p;
+        }
+      } finally {
+        close().catch(() => {});
       }
     },
   };
