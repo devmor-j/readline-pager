@@ -1,6 +1,6 @@
 import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { FileHandle, open } from "node:fs/promises";
-import { createPageQueue } from "../queue.js";
+import { createRingBuffer } from "../queue.js";
 import type { Pager, ReaderOptions } from "../types.js";
 
 export function createBackwardReader(
@@ -9,7 +9,7 @@ export function createBackwardReader(
 ): Pager {
   const { chunkSize, pageSize, delimiter, prefetch } = options;
 
-  const pageQueue = createPageQueue();
+  const pageQueue = createRingBuffer<string[]>(Math.max(2, prefetch + 1));
   const local: string[] = [];
 
   let fd: FileHandle | null = null;
@@ -38,7 +38,7 @@ export function createBackwardReader(
     await init();
     if (!fd) return;
 
-    while (pageQueue.queue.length < prefetch && pos > 0) {
+    while (pageQueue.count < prefetch && pos > 0 && !closed) {
       const readSize = Math.min(chunkSize, pos);
       pos -= readSize;
 
@@ -60,7 +60,7 @@ export function createBackwardReader(
       }
     }
 
-    if (pos === 0) {
+    if (pos === 0 && !done) {
       local.push(buffer);
       buffer = "";
 
@@ -75,6 +75,7 @@ export function createBackwardReader(
         await fd.close();
         fd = null;
       }
+      pageQueue.wake();
     }
   }
 
@@ -83,7 +84,7 @@ export function createBackwardReader(
     initSync();
     if (fdSync === null) return;
 
-    while (pageQueue.queue.length < prefetch && pos > 0) {
+    while (pageQueue.count < prefetch && pos > 0 && !closed) {
       const readSize = Math.min(chunkSize, pos);
       pos -= readSize;
 
@@ -105,7 +106,7 @@ export function createBackwardReader(
       }
     }
 
-    if (pos === 0) {
+    if (pos === 0 && !done) {
       local.push(buffer);
       buffer = "";
 
@@ -127,7 +128,7 @@ export function createBackwardReader(
     if (closed) return null;
     await fill();
 
-    const page = await pageQueue.shift(() => done);
+    const page = await pageQueue.shift(done);
     if (!page) return null;
 
     return page;
@@ -137,17 +138,17 @@ export function createBackwardReader(
     if (closed) return null;
     fillSync();
 
-    if (pageQueue.queue.length) return pageQueue.queue.shift()!;
+    const page = pageQueue.shiftSync();
+    if (page) return page;
     if (done) return null;
 
     return null;
   }
 
-  // TODO: merge partial closes into close api
   async function close() {
     closed = true;
     done = true;
-    pageQueue.queue.length = 0;
+    pageQueue.clear();
 
     if (fd) {
       await fd.close();

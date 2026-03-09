@@ -1,6 +1,6 @@
 import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { FileHandle, open } from "node:fs/promises";
-import { createPageQueue } from "../queue.js";
+import { createRingBuffer } from "../queue.js";
 import type { Pager, ReaderOptions } from "../types.js";
 
 export function createForwardReader(
@@ -9,7 +9,7 @@ export function createForwardReader(
 ): Pager {
   const { chunkSize, pageSize, delimiter, prefetch } = options;
 
-  const pageQueue = createPageQueue();
+  const pageQueue = createRingBuffer<string[]>(Math.max(2, prefetch + 1));
   const local: string[] = [];
 
   let fd: FileHandle | null = null;
@@ -39,7 +39,7 @@ export function createForwardReader(
     await init();
     if (!fd) return;
 
-    while (pageQueue.queue.length < prefetch && pos < size) {
+    while (pageQueue.count < prefetch && pos < size && !closed) {
       const readSize = Math.min(chunkSize, size - pos);
       const buf = Buffer.allocUnsafe(readSize);
       const { bytesRead } = await fd.read(buf, 0, readSize, pos);
@@ -59,7 +59,7 @@ export function createForwardReader(
       }
     }
 
-    if (pos >= size) {
+    if (pos >= size && !done) {
       const parts = buffer.length > 0 ? buffer.split(delimiter) : [""];
       for (const line of parts) {
         local.push(line);
@@ -75,6 +75,7 @@ export function createForwardReader(
         await fd.close();
         fd = null;
       }
+      pageQueue.wake();
     }
   }
 
@@ -83,7 +84,7 @@ export function createForwardReader(
     initSync();
     if (fdSync === null) return;
 
-    while (pageQueue.queue.length < prefetch && pos < size) {
+    while (pageQueue.count < prefetch && pos < size && !closed) {
       const readSize = Math.min(chunkSize, size - pos);
       const buf = Buffer.allocUnsafe(readSize);
       const bytesRead = readSync(fdSync, buf, 0, readSize, pos);
@@ -103,7 +104,7 @@ export function createForwardReader(
       }
     }
 
-    if (pos >= size) {
+    if (pos >= size && !done) {
       const parts = buffer.length > 0 ? buffer.split(delimiter) : [""];
       for (const line of parts) {
         local.push(line);
@@ -126,7 +127,7 @@ export function createForwardReader(
     if (closed) return null;
     await fill();
 
-    const page = await pageQueue.shift(() => done);
+    const page = await pageQueue.shift(done);
     if (!page) return null;
 
     return page;
@@ -136,17 +137,17 @@ export function createForwardReader(
     if (closed) return null;
     fillSync();
 
-    if (pageQueue.queue.length) return pageQueue.queue.shift()!;
+    const page = pageQueue.shiftSync();
+    if (page) return page;
     if (done) return null;
 
     return null;
   }
 
-  // TODO: merge partial closes into close api
   async function close() {
     closed = true;
     done = true;
-    pageQueue.queue.length = 0;
+    pageQueue.clear();
 
     if (fd) {
       await fd.close();

@@ -1,5 +1,5 @@
 import { Worker } from "node:worker_threads";
-import { createPageQueue } from "../queue.js";
+import { createRingBuffer } from "../queue.js";
 import type { Pager, ReaderOptions } from "../types.js";
 
 // TODO: refactor with better technique
@@ -24,7 +24,7 @@ export function createWorkerReader(
     workerData: { filepath, chunkSize, pageSize, delimiter },
   });
 
-  const pageQueue = createPageQueue();
+  const pageQueue = createRingBuffer<string[]>(Math.max(2, prefetch + 1));
 
   let done = false;
   let closed = false;
@@ -43,7 +43,7 @@ export function createWorkerReader(
   async function next() {
     if (closed) return null;
 
-    const page = await pageQueue.shift(() => done);
+    const page = await pageQueue.shift(done);
     if (!page) return null;
 
     return page;
@@ -52,17 +52,17 @@ export function createWorkerReader(
   function nextSync() {
     if (closed) return null;
 
-    if (pageQueue.queue.length) return pageQueue.queue.shift()!;
+    const page = pageQueue.shiftSync();
+    if (page) return page;
     if (done) return null;
 
     return null;
   }
 
-  // TODO: merge partial closes into close api
   async function close() {
     closed = true;
     done = true;
-
+    pageQueue.clear();
     await worker.terminate();
   }
 
