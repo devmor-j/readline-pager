@@ -22,6 +22,7 @@ export function createForwardReader(
 
   fdSync = openSync(filepath, "r");
   size = statSync(filepath).size;
+
   if (size === 0) {
     pageQueue.push([buffer]);
     done = true;
@@ -103,9 +104,7 @@ export function createForwardReader(
           await fd.close();
           fd = null;
         }
-      } catch {
-        /* ignore */
-      }
+      } catch {}
     }
   })();
 
@@ -176,24 +175,16 @@ export function createForwardReader(
     if (fd) {
       try {
         await fd.close();
-      } catch {
-        /* ignore */
-      }
+      } catch {}
       fd = null;
     }
 
     if (fdSync !== null) {
       try {
         closeSync(fdSync);
-      } catch {
-        /* ignore */
-      }
+      } catch {}
       fdSync = null;
     }
-  }
-
-  function tryClose() {
-    void close().catch(() => {});
   }
 
   return {
@@ -208,7 +199,16 @@ export function createForwardReader(
           yield p;
         }
       } finally {
-        tryClose();
+        closed = true;
+        done = true;
+        pageQueue.clear();
+
+        if (fd) {
+          try {
+            await fd.close();
+          } catch {}
+          fd = null;
+        }
       }
     },
     *[Symbol.iterator]() {
@@ -219,7 +219,23 @@ export function createForwardReader(
           yield p;
         }
       } finally {
-        tryClose();
+        closed = true;
+        done = true;
+        pageQueue.clear();
+
+        try {
+          if (fdSync) {
+            closeSync(fdSync);
+            fdSync = null;
+          }
+        } catch {}
+
+        try {
+          if (fd?.fd) {
+            closeSync(fd.fd);
+            fd = null;
+          }
+        } catch {}
       }
     },
   };

@@ -21,6 +21,7 @@ export function createBackwardReader(
 
   fdSync = openSync(filepath, "r");
   pos = statSync(filepath).size;
+
   if (pos === 0) {
     pageQueue.push([buffer]);
     done = true;
@@ -52,7 +53,7 @@ export function createBackwardReader(
           const buf = Buffer.allocUnsafe(readSize);
           await fd.read(buf, 0, readSize, pos);
 
-          buffer += buf.toString("utf8");
+          buffer = buf.toString("utf8") + buffer;
 
           let idx: number;
           while ((idx = buffer.lastIndexOf(delimiter)) !== -1) {
@@ -102,9 +103,7 @@ export function createBackwardReader(
           await fd.close();
           fd = null;
         }
-      } catch {
-        /* ignore */
-      }
+      } catch {}
     }
   })();
 
@@ -119,7 +118,7 @@ export function createBackwardReader(
       const buf = Buffer.allocUnsafe(readSize);
       readSync(fdSync, buf, 0, readSize, pos);
 
-      buffer += buf.toString("utf8");
+      buffer = buf.toString("utf8") + buffer;
 
       let idx: number;
       while ((idx = buffer.lastIndexOf(delimiter)) !== -1) {
@@ -176,24 +175,16 @@ export function createBackwardReader(
     if (fd) {
       try {
         await fd.close();
-      } catch {
-        /* ignore */
-      }
+      } catch {}
       fd = null;
     }
 
     if (fdSync !== null) {
       try {
         closeSync(fdSync);
-      } catch {
-        /* ignore */
-      }
+      } catch {}
       fdSync = null;
     }
-  }
-
-  function tryClose() {
-    void close().catch(() => {});
   }
 
   return {
@@ -208,7 +199,16 @@ export function createBackwardReader(
           yield p;
         }
       } finally {
-        tryClose();
+        closed = true;
+        done = true;
+        pageQueue.clear();
+
+        if (fd) {
+          try {
+            await fd.close();
+          } catch {}
+          fd = null;
+        }
       }
     },
     *[Symbol.iterator]() {
@@ -219,7 +219,23 @@ export function createBackwardReader(
           yield p;
         }
       } finally {
-        tryClose();
+        closed = true;
+        done = true;
+        pageQueue.clear();
+
+        try {
+          if (fdSync) {
+            closeSync(fdSync);
+            fdSync = null;
+          }
+        } catch {}
+
+        try {
+          if (fd?.fd) {
+            closeSync(fd.fd);
+            fd = null;
+          }
+        } catch {}
       }
     },
   };

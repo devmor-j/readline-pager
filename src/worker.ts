@@ -42,5 +42,6 @@ const { filepath, chunkSize, pageSize, delimiter } = workerData;
   }
 
   parentPort?.postMessage({ type: "done" });
+
   await fd.close();
 })();

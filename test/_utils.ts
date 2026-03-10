@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const TMP_DIR = "./tmp";
+const TMP_DIR = "./tmp/test";
 
 export interface CreateTmpFileOptions {
   filename?: string;
