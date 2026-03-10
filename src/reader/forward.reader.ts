@@ -20,68 +20,97 @@ export function createForwardReader(
   let done = false;
   let closed = false;
 
-  async function init() {
-    if (fd) return;
-    fd = await open(filepath, "r");
-    size = (await fd.stat()).size;
-    if (size === 0) done = true;
+  fdSync = openSync(filepath, "r");
+  size = statSync(filepath).size;
+  if (size === 0) {
+    pageQueue.push([buffer]);
+    done = true;
+    pageQueue.wake();
   }
 
-  function initSync() {
-    if (fdSync) return;
-    fdSync = openSync(filepath, "r");
-    size = statSync(filepath).size;
-    if (size === 0) done = true;
-  }
+  (async () => {
+    try {
+      fd = await open(filepath, "r");
+      size = (await fd.stat()).size;
 
-  async function fill() {
-    if (done || closed) return;
-    await init();
-    if (!fd) return;
+      if (size === 0) {
+        if (!done) {
+          pageQueue.push([buffer]);
+          done = true;
+        }
+        if (fd) {
+          await fd.close();
+          fd = null;
+        }
+        pageQueue.wake();
+        return;
+      }
 
-    while (pageQueue.count < prefetch && pos < size && !closed) {
-      const readSize = Math.min(chunkSize, size - pos);
-      const buf = Buffer.allocUnsafe(readSize);
-      const { bytesRead } = await fd.read(buf, 0, readSize, pos);
-      pos += bytesRead;
+      while (!done && !closed) {
+        while (pageQueue.count < prefetch && pos < size && !closed) {
+          const readSize = Math.min(chunkSize, size - pos);
+          const buf = Buffer.allocUnsafe(readSize);
+          const { bytesRead } = await fd.read(buf, 0, readSize, pos);
+          pos += bytesRead;
 
-      buffer += buf.toString("utf8", 0, bytesRead);
+          buffer += buf.toString("utf8", 0, bytesRead);
 
-      let idx: number;
-      while ((idx = buffer.indexOf(delimiter)) !== -1) {
-        const line = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + delimiter.length);
-        local.push(line);
+          let idx: number;
+          while ((idx = buffer.indexOf(delimiter)) !== -1) {
+            const line = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + delimiter.length);
+            local.push(line);
 
-        while (local.length >= pageSize) {
-          pageQueue.push(local.splice(0, pageSize));
+            while (local.length >= pageSize) {
+              pageQueue.push(local.splice(0, pageSize));
+            }
+          }
+        }
+
+        if (pos >= size && !done) {
+          const parts = buffer.length > 0 ? buffer.split(delimiter) : [""];
+          for (const line of parts) {
+            local.push(line);
+          }
+          buffer = "";
+
+          while (local.length > 0 && !closed) {
+            while (pageQueue.count >= pageQueue.capacity && !closed) {
+              await new Promise<void>((r) => setImmediate(r));
+            }
+            if (closed) break;
+            pageQueue.push(local.splice(0, pageSize));
+          }
+
+          done = true;
+          if (fd) {
+            await fd.close();
+            fd = null;
+          }
+          pageQueue.wake();
+          break;
+        }
+
+        if (!done && !closed) {
+          await new Promise<void>((r) => setImmediate(r));
         }
       }
-    }
-
-    if (pos >= size && !done) {
-      const parts = buffer.length > 0 ? buffer.split(delimiter) : [""];
-      for (const line of parts) {
-        local.push(line);
-      }
-      buffer = "";
-
-      while (local.length > 0) {
-        pageQueue.push(local.splice(0, pageSize));
-      }
-
+    } catch {
       done = true;
-      if (fd) {
-        await fd.close();
-        fd = null;
-      }
       pageQueue.wake();
+      try {
+        if (fd) {
+          await fd.close();
+          fd = null;
+        }
+      } catch {
+        /* ignore */
+      }
     }
-  }
+  })();
 
   function fillSync() {
     if (done || closed) return;
-    initSync();
     if (fdSync === null) return;
 
     while (pageQueue.count < prefetch && pos < size && !closed) {
@@ -120,16 +149,14 @@ export function createForwardReader(
         closeSync(fdSync);
         fdSync = null;
       }
+      pageQueue.wake();
     }
   }
 
   async function next() {
     if (closed) return null;
-    await fill();
 
     const page = await pageQueue.shift(done);
-    if (!page) return null;
-
     return page;
   }
 
@@ -138,10 +165,7 @@ export function createForwardReader(
     fillSync();
 
     const page = pageQueue.shiftSync();
-    if (page) return page;
-    if (done) return null;
-
-    return null;
+    return page;
   }
 
   async function close() {
@@ -150,12 +174,20 @@ export function createForwardReader(
     pageQueue.clear();
 
     if (fd) {
-      await fd.close();
+      try {
+        await fd.close();
+      } catch {
+        /* ignore */
+      }
       fd = null;
     }
 
     if (fdSync !== null) {
-      closeSync(fdSync);
+      try {
+        closeSync(fdSync);
+      } catch {
+        /* ignore */
+      }
       fdSync = null;
     }
   }

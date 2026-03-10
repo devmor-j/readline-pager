@@ -18,27 +18,29 @@ const { filepath, chunkSize, pageSize, delimiter } = workerData;
     pos += bytesRead;
 
     buffer += buf.toString("utf8", 0, bytesRead);
-    const parts = buffer.split(delimiter);
-    buffer = parts.pop() ?? "";
 
-    for (const line of parts) {
+    let idx: number;
+    while ((idx = buffer.indexOf(delimiter)) !== -1) {
+      const line = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + delimiter.length);
       local.push(line);
 
-      if (local.length === pageSize) {
-        parentPort?.postMessage({ type: "page", data: local.splice(0) });
+      while (local.length >= pageSize) {
+        parentPort?.postMessage({
+          type: "page",
+          data: local.splice(0, pageSize),
+        });
       }
     }
   }
 
-  if (buffer !== "") {
-    local.push(buffer);
-  }
+  local.push(buffer);
 
-  if (local.length) {
-    parentPort?.postMessage({ type: "page", data: local });
+  while (local.length > 0) {
+    const page = local.splice(0, pageSize);
+    parentPort?.postMessage({ type: "page", data: page });
   }
 
   parentPort?.postMessage({ type: "done" });
-
   await fd.close();
 })();

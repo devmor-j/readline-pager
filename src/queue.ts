@@ -31,7 +31,7 @@ export function createRingBuffer<T>(capacity: number) {
     throw new RangeError("capacity must be a positive number");
   }
 
-  const buf: Array<T | undefined> = new Array(capacity);
+  let buf: Array<T | undefined> = new Array(capacity);
   let head = 0;
   let tail = 0;
   let count = 0;
@@ -39,19 +39,20 @@ export function createRingBuffer<T>(capacity: number) {
 
   function push(item: T) {
     if (count === buf.length) {
-      buf[tail] = item;
-
-      tail++;
-      if (tail === capacity) tail = 0;
-
-      head = tail;
-      return;
+      const newCap = buf.length * 2;
+      const newBuf: Array<T | undefined> = new Array(newCap);
+      for (let i = 0; i < count; i++) {
+        newBuf[i] = buf[(head + i) % buf.length];
+      }
+      buf = newBuf;
+      head = 0;
+      tail = count;
     }
 
     buf[tail] = item;
 
     tail++;
-    if (tail === capacity) tail = 0;
+    if (tail === buf.length) tail = 0;
 
     count++;
 
@@ -69,7 +70,7 @@ export function createRingBuffer<T>(capacity: number) {
     buf[head] = undefined;
 
     head++;
-    if (head === capacity) head = 0;
+    if (head === buf.length) head = 0;
 
     count--;
     return v;

@@ -12,9 +12,9 @@ suite("filepath", () => {
   });
 
   test("it throws if file does not exist on read", async () => {
-    const pager = createPager("./tmp/does-not-exist.txt");
-
-    await assert.rejects(() => pager.next());
+    await assert.rejects(async () => {
+      createPager("./tmp/does-not-exist.txt");
+    });
   });
 
   test("throws if file cannot be read due to permissions", async () => {
@@ -25,10 +25,8 @@ suite("filepath", () => {
     try {
       await chmod(filepath, 0o000);
 
-      const pager = createPager(filepath);
-
       await assert.rejects(async () => {
-        await pager.next();
+        createPager(filepath);
       });
     } finally {
       await chmod(filepath, 0o644).catch(() => {});

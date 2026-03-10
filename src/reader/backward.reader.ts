@@ -19,69 +19,97 @@ export function createBackwardReader(
   let done = false;
   let closed = false;
 
-  async function init() {
-    if (fd) return;
-    fd = await open(filepath, "r");
-    pos = (await fd.stat()).size;
-    if (pos === 0) done = true;
+  fdSync = openSync(filepath, "r");
+  pos = statSync(filepath).size;
+  if (pos === 0) {
+    pageQueue.push([buffer]);
+    done = true;
+    pageQueue.wake();
   }
 
-  function initSync() {
-    if (fdSync) return;
-    fdSync = openSync(filepath, "r");
-    pos = statSync(filepath).size;
-    if (pos === 0) done = true;
-  }
+  (async () => {
+    try {
+      fd = await open(filepath, "r");
+      pos = (await fd.stat()).size;
+      if (pos === 0) {
+        if (!done) {
+          pageQueue.push([buffer]);
+          done = true;
+        }
+        if (fd) {
+          await fd.close();
+          fd = null;
+        }
+        pageQueue.wake();
+        return;
+      }
 
-  async function fill() {
-    if (done || closed) return;
-    await init();
-    if (!fd) return;
+      while (!done && !closed) {
+        while (pageQueue.count < prefetch && pos > 0 && !closed) {
+          const readSize = Math.min(chunkSize, pos);
+          pos -= readSize;
 
-    while (pageQueue.count < prefetch && pos > 0 && !closed) {
-      const readSize = Math.min(chunkSize, pos);
-      pos -= readSize;
+          const buf = Buffer.allocUnsafe(readSize);
+          await fd.read(buf, 0, readSize, pos);
 
-      const buf = Buffer.allocUnsafe(readSize);
-      await fd.read(buf, 0, readSize, pos);
+          buffer += buf.toString("utf8");
 
-      buffer += buf.toString("utf8");
+          let idx: number;
+          while ((idx = buffer.lastIndexOf(delimiter)) !== -1) {
+            const line = buffer.slice(idx + delimiter.length);
+            buffer = buffer.slice(0, idx);
+            local.push(line);
 
-      let idx: number;
-      while ((idx = buffer.lastIndexOf(delimiter)) !== -1) {
-        const line = buffer.slice(idx + delimiter.length);
-        buffer = buffer.slice(0, idx);
-        local.push(line);
+            while (local.length >= pageSize) {
+              const page = local.splice(0, pageSize);
+              pageQueue.push(page);
+            }
+          }
+        }
 
-        while (local.length >= pageSize) {
-          const page = local.splice(0, pageSize);
-          pageQueue.push(page);
+        if (pos === 0 && !done) {
+          local.push(buffer);
+          buffer = "";
+
+          while (local.length > 0 && !closed) {
+            while (pageQueue.count >= pageQueue.capacity && !closed) {
+              await new Promise<void>((r) => setImmediate(r));
+            }
+            if (closed) break;
+            const sliceSize = Math.min(pageSize, local.length);
+            const page = local.splice(local.length - sliceSize, sliceSize);
+            pageQueue.push(page);
+          }
+
+          done = true;
+          if (fd) {
+            await fd.close();
+            fd = null;
+          }
+          pageQueue.wake();
+          break;
+        }
+
+        if (!done && !closed) {
+          await new Promise((r) => setImmediate(r));
         }
       }
-    }
-
-    if (pos === 0 && !done) {
-      local.push(buffer);
-      buffer = "";
-
-      while (local.length > 0) {
-        const sliceSize = Math.min(pageSize, local.length);
-        const page = local.splice(local.length - sliceSize, sliceSize);
-        pageQueue.push(page);
-      }
-
+    } catch {
       done = true;
-      if (fd) {
-        await fd.close();
-        fd = null;
-      }
       pageQueue.wake();
+      try {
+        if (fd) {
+          await fd.close();
+          fd = null;
+        }
+      } catch {
+        /* ignore */
+      }
     }
-  }
+  })();
 
   function fillSync() {
     if (done || closed) return;
-    initSync();
     if (fdSync === null) return;
 
     while (pageQueue.count < prefetch && pos > 0 && !closed) {
@@ -121,16 +149,14 @@ export function createBackwardReader(
         closeSync(fdSync);
         fdSync = null;
       }
+      pageQueue.wake();
     }
   }
 
   async function next() {
     if (closed) return null;
-    await fill();
 
     const page = await pageQueue.shift(done);
-    if (!page) return null;
-
     return page;
   }
 
@@ -139,10 +165,7 @@ export function createBackwardReader(
     fillSync();
 
     const page = pageQueue.shiftSync();
-    if (page) return page;
-    if (done) return null;
-
-    return null;
+    return page;
   }
 
   async function close() {
@@ -151,12 +174,20 @@ export function createBackwardReader(
     pageQueue.clear();
 
     if (fd) {
-      await fd.close();
+      try {
+        await fd.close();
+      } catch {
+        /* ignore */
+      }
       fd = null;
     }
 
     if (fdSync !== null) {
-      closeSync(fdSync);
+      try {
+        closeSync(fdSync);
+      } catch {
+        /* ignore */
+      }
       fdSync = null;
     }
   }
