@@ -31,9 +31,7 @@ suite("options", () => {
       const lines = ["a", "b", "c", "d", "e"];
       const content = lines.join("\n");
 
-      const filepath = await createTmpFile(content, {
-        filename: "backward.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {
@@ -57,9 +55,7 @@ suite("options", () => {
       const lines = ["a", "b", "c"];
       const content = lines.join("\n") + "\n";
 
-      const filepath = await createTmpFile(content, {
-        filename: "backward-trailing-newline.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const forwardPager = createPager(filepath, {
@@ -119,9 +115,7 @@ suite("options", () => {
 
     test("nextSync works in backward mode", async () => {
       const content = ["a", "b", "c", "d"].join("\n");
-      const filepath = await createTmpFile(content, {
-        filename: "sync-backward.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {
@@ -215,9 +209,7 @@ suite("options", () => {
   suite("chunkSize", () => {
     test("backward async reader handles truncated read (read-failure path)", async () => {
       const content = "a\nb\nc\nd\n";
-      const filepath = await createTmpFile(content, {
-        filename: "pager-error.txt",
-      });
+      const filepath = await createTmpFile(content);
       const pager = createPager(filepath, {
         backward: true,
         pageSize: 1,
@@ -258,9 +250,7 @@ suite("options", () => {
   suite("delimiter", () => {
     test("it works with custom delimiter", async () => {
       const content = ["a", "b", "c", "d"].join("|");
-      const filepath = await createTmpFile(content, {
-        filename: "delimiter.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {
@@ -282,9 +272,7 @@ suite("options", () => {
       const lines = ["one", "two", "three"];
       const content = lines.join("\r\n");
 
-      const filepath = await createTmpFile(content, {
-        filename: "multibyte-delimiter.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {
@@ -306,9 +294,7 @@ suite("options", () => {
 
     test("backward reader async catch branch (delimiter.toString throws)", async () => {
       const content = createTextLines(10);
-      const filepath = await createTmpFile(content, {
-        filename: "backward-catch.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       // create a delimiter whose toString will throw when coercion happens
       const badDelimiter = {
@@ -337,9 +323,7 @@ suite("options", () => {
   suite("pageSize", () => {
     test("it splits pages correctly", async () => {
       const content = createTextLines(2_500);
-      const filepath = await createTmpFile(content, {
-        filename: "pagesize.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {
@@ -365,9 +349,7 @@ suite("options", () => {
     test("sync iterator (for...of) honors prefetch and page boundaries", async () => {
       const total = 12;
       const content = createTextLines(total);
-      const filepath = await createTmpFile(content, {
-        filename: "prefetch-sync-iter.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {
@@ -401,9 +383,7 @@ suite("options", () => {
   suite("useWorker", () => {
     test("spawns a new worker", async () => {
       const content = createTextLines(100);
-      const filepath = await createTmpFile(content, {
-        filename: "metadata_worker.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {
@@ -425,7 +405,7 @@ suite("options", () => {
 
     test("it reads entire file correctly (worker)", async () => {
       const content = createTextLines(2_000);
-      const filepath = await createTmpFile(content, { filename: "worker.txt" });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {
@@ -455,9 +435,7 @@ suite("options", () => {
 
     test("close() stops worker and prevents further pages", async () => {
       const content = createTextLines(10_000);
-      const filepath = await createTmpFile(content, {
-        filename: "worker-close-early.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {
@@ -491,9 +469,7 @@ suite("options", () => {
 
     test("worker nextSync returns pages if available", async () => {
       const content = createTextLines(20);
-      const filepath = await createTmpFile(content, {
-        filename: "worker-sync.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {
@@ -514,9 +490,7 @@ suite("options", () => {
 
     test("worker handles termination gracefully", async () => {
       const content = createTextLines(100);
-      const filepath = await createTmpFile(content, {
-        filename: "worker-exit.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {
@@ -534,9 +508,7 @@ suite("options", () => {
     });
 
     test("worker finishes immediately (tiny file) and iterator still closes cleanly", async () => {
-      const filepath = await createTmpFile("x", {
-        filename: "worker-tiny-2.txt",
-      });
+      const filepath = await createTmpFile("x", {});
 
       try {
         const pager = createPager(filepath, {
@@ -561,9 +533,7 @@ suite("options", () => {
 
     test("worker sync iterator yields multiple prefetched pages", async () => {
       const content = ["a", "b", "c", "d", "e", "f"].join("\n");
-      const filepath = await createTmpFile(content, {
-        filename: "worker-sync-prefetch2.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {

@@ -95,9 +95,9 @@ suite("commonjs", () => {
       }
 
       while (true) {
-        const nextPage = pager.nextSync();
-        if (!nextPage) break;
-        collected.push(...nextPage);
+        const page = pager.nextSync();
+        if (!page) break;
+        collected.push(...page);
       }
 
       if (iter.return) await iter.return();

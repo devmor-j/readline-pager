@@ -53,6 +53,7 @@ export function createNativePager(
   let closed = false;
 
   const init = () => {
+    // TODO: process pageSize on native addon (cc)
     fd = pagerNative.open(filepath, pageSize, delimiter);
   };
 

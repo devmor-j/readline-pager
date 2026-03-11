@@ -239,8 +239,12 @@ static napi_value Open(napi_env env, napi_callback_info info) {
   }
 
   int fd = open(path, O_RDONLY);
-  if (fd < 0)
+  if (fd < 0) {
+    napi_throw_error(
+        env, nullptr,
+        "Failed to open file: file does not exist or cannot be read");
     return nullptr;
+  }
 
   struct stat stbuf;
   fstat(fd, &stbuf);

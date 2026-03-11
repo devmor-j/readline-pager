@@ -8,9 +8,7 @@ suite("stress", () => {
     const total = 50;
     const pageSize = 5;
     const content = createTextLines(total);
-    const filepath = await createTmpFile(content, {
-      filename: "prefetch-capacity.txt",
-    });
+    const filepath = await createTmpFile(content);
 
     try {
       const pager = createPager(filepath, {

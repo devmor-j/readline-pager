@@ -24,9 +24,7 @@ suite("apis", () => {
 
     test("next() waits when pageSize large and prefetch small (waiter branch)", async () => {
       const content = createTextLines(5);
-      const filepath = await createTmpFile(content, {
-        filename: "waiter-branch.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {
@@ -46,9 +44,7 @@ suite("apis", () => {
   suite("nextSync", () => {
     test("nextSync() reads pages correctly (forward)", async () => {
       const content = createTextLines(9);
-      const filepath = await createTmpFile(content, {
-        filename: "sync-next.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {
@@ -74,7 +70,7 @@ suite("apis", () => {
   suite("close", () => {
     test("it stops reading immediately", async () => {
       const content = createTextLines(5_000);
-      const filepath = await createTmpFile(content, { filename: "close.txt" });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {
@@ -97,9 +93,7 @@ suite("apis", () => {
   suite("async iterator", () => {
     test("async iterator .return() triggers cleanup (async finally)", async () => {
       const content = createTextLines(20);
-      const filepath = await createTmpFile(content, {
-        filename: "iter-return-async.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, { pageSize: 2, prefetch: 2 });
@@ -124,9 +118,7 @@ suite("apis", () => {
   suite("sync iterator", () => {
     test("sync iterator .return() triggers cleanup (sync finally)", async () => {
       const content = createTextLines(20);
-      const filepath = await createTmpFile(content, {
-        filename: "iter-return-sync.txt",
-      });
+      const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, { pageSize: 2, prefetch: 1 });

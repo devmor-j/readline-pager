@@ -7,9 +7,7 @@ suite("monkey", () => {
   test("random prefetch and pageSize never lose lines (monkey/randomized)", async () => {
     const total = 1_000;
     const content = createTextLines(total);
-    const filepath = await createTmpFile(content, {
-      filename: "random-prefetch.txt",
-    });
+    const filepath = await createTmpFile(content);
 
     try {
       const pager = createPager(filepath, {

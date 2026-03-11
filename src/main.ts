@@ -44,6 +44,6 @@ export function createPager(
 
 export default createPager;
 
-export { createNativePager } from "./native.js";
+// export { createNativePager } from "./native.js";
 
 export type * from "./types.js";

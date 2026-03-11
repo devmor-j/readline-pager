@@ -18,9 +18,7 @@ suite("filepath", () => {
   });
 
   test("throws if file cannot be read due to permissions", async () => {
-    const filepath = await createTmpFile("secret", {
-      filename: "no-permission.txt",
-    });
+    const filepath = await createTmpFile("secret");
 
     try {
       await chmod(filepath, 0o000);
@@ -38,9 +36,7 @@ suite("filepath", () => {
 suite("exceptional files", () => {
   test("empty file yields single empty line", async () => {
     const content = "";
-    const filepath = await createTmpFile(content, {
-      filename: "empty.txt",
-    });
+    const filepath = await createTmpFile(content);
 
     try {
       const pager = createPager(filepath);
@@ -60,9 +56,7 @@ suite("exceptional files", () => {
 
   test("single line with trailing newline", async () => {
     const content = "only-line\n";
-    const filepath = await createTmpFile(content, {
-      filename: "single.txt",
-    });
+    const filepath = await createTmpFile(content);
 
     try {
       const pager = createPager(filepath);
@@ -84,9 +78,7 @@ suite("exceptional files", () => {
 
   test("multiple lines without trailing delimiter", async () => {
     const content = "a\nb\nc";
-    const filepath = await createTmpFile(content, {
-      filename: "no-trailing.txt",
-    });
+    const filepath = await createTmpFile(content);
 
     try {
       const pager = createPager(filepath);
@@ -107,9 +99,7 @@ suite("exceptional files", () => {
     const lines = ["a", "b", "c", ""];
     const content = lines.join("\n");
 
-    const filepath = await createTmpFile(content, {
-      filename: "forward-trailing-newline.txt",
-    });
+    const filepath = await createTmpFile(content);
 
     try {
       const pager = createPager(filepath, { pageSize: 10 });
@@ -129,9 +119,7 @@ suite("exceptional files", () => {
   test("empty lines do not signal end-of-file", async () => {
     const lines = ["line-0", "", "line-2"];
     const content = lines.join("\n");
-    const filepath = await createTmpFile(content, {
-      filename: "empty-line.txt",
-    });
+    const filepath = await createTmpFile(content);
 
     try {
       const pager = createPager(filepath, {

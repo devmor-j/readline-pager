@@ -11,7 +11,6 @@ import {
   whatRuntime,
 } from "./_utils.ts";
 
-/** 1. NODE: Standard (Line-by-Line) */
 async function runNodeReadline(filepath: string) {
   const readline = createInterface({ input: createReadStream(filepath) });
 
@@ -28,7 +27,6 @@ async function runNodeReadline(filepath: string) {
   };
 }
 
-/** 2. DENO: Standard (Line-by-Line) */
 async function runDenoReadlines(filepath: string) {
   const file = await Deno.open(filepath);
   const decoder = new TextDecoder();
@@ -56,7 +54,6 @@ async function runDenoReadlines(filepath: string) {
   };
 }
 
-/** 3. DENO: Batched (Page-by-Page) */
 async function runDenoReadlinesBatched(filepath: string, batchSize: number) {
   await using file = await Deno.open(filepath);
   const reader = file.readable.getReader();
@@ -90,7 +87,6 @@ async function runDenoReadlinesBatched(filepath: string, batchSize: number) {
   };
 }
 
-/** 4. BUN: Standard (Line-by-Line) */
 async function runBunReadlines(filepath: string) {
   const file = Bun.file(filepath);
   const stream = file.stream().pipeThrough(new TextDecoderStream());
@@ -104,7 +100,6 @@ async function runBunReadlines(filepath: string) {
     buffer = lines.pop() ?? "";
 
     for (const line of lines) {
-      /* no-op */
     }
   }
 
@@ -116,7 +111,6 @@ async function runBunReadlines(filepath: string) {
   };
 }
 
-/** 5. BUN: Batched (Page-by-Page) */
 async function runBunReadlinesBatched(filepath: string, batchSize: number) {
   const file = Bun.file(filepath);
   const stream = file.stream();
@@ -179,8 +173,9 @@ async function runReadlinePager(
 
   const startTime = process.hrtime.bigint();
 
-  for await (const _ of pager) {
-    /* iterating pages */
+  for await (const page of pager) {
+    for (const line of page) {
+    }
   }
 
   const endTime = process.hrtime.bigint();
@@ -199,17 +194,17 @@ async function benchmark(args = parseProcessArgv()) {
   const filename = `bench_${randomUUID().substring(0, 8)}.txt`;
   const { filebytes, filepath } = await createBigTmpFile(filename, LINES);
 
+  const fileMB = filebytes / 1_024 / 1_024;
+
   console.log(
-    `📦 Benchmark: ${LINES.toLocaleString()} lines | ${(filebytes / 1_024 / 1_024).toFixed(2)} MB | Runtime: [32m${runtime}[0m`,
+    `📦 Benchmark: ${LINES.toLocaleString()} lines | ${Math.round(fileMB)} MB | [32m${runtime}[0m`,
   );
 
-  // --- 1. Node ---
   {
     const { startTime, endTime } = await runNodeReadline(filepath);
     logThroughput("node:line", endTime, startTime, filebytes);
   }
 
-  // --- 2. Deno ---
   if (runtime === "Deno") {
     {
       const { startTime, endTime } = await runDenoReadlines(filepath);
@@ -225,7 +220,6 @@ async function benchmark(args = parseProcessArgv()) {
     }
   }
 
-  // --- 3. Bun ---
   if (runtime === "Bun") {
     {
       const { startTime, endTime } = await runBunReadlines(filepath);
@@ -241,7 +235,6 @@ async function benchmark(args = parseProcessArgv()) {
     }
   }
 
-  // --- 4. readline-pager (Node, Deno & Bun) ---
   {
     const { startTime, endTime } = await runReadlinePager(
       filepath,
