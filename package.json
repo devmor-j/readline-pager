@@ -1,6 +1,6 @@
 {
   "name": "readline-pager",
-  "version": "0.2.7",
+  "version": "0.3.0",
   "scripts": {
     "build:js": "tsdown",
     "build:native": "prebuildify --napi --strip && rm -rf ./build",
@@ -11,14 +11,14 @@
     "benchmark": "node test/_benchmark.ts; bun test/_benchmark.ts; deno --allow-write --allow-read test/_benchmark.ts"
   },
   "devDependencies": {
-    "@types/bun": "~1.3.9",
+    "@types/bun": "~1.3.11",
     "@types/deno": "~2.5.0",
-    "@types/node": "~25.3.0",
+    "@types/node": "~25.5.0",
     "node-gyp": "~12.2.0",
     "prebuildify": "~6.0.1",
     "prettier": "~3.8.1",
     "prettier-plugin-organize-imports": "~4.3.0",
-    "tsdown": "~0.20.3",
+    "tsdown": "~0.21.4",
     "typescript": "~5.9.3"
   },
   "gypfile": false,
