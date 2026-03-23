@@ -1,5 +1,6 @@
 import { closeSync, openSync, readSync, statSync } from "node:fs";
-import { FileHandle, open } from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
+import { open } from "node:fs/promises";
 import { createRingBuffer } from "../queue.js";
 import type { Pager, ReaderOptions } from "../types.js";
 
@@ -19,6 +20,7 @@ export function createForwardReader(
   let buffer = "";
   let done = false;
   let closed = false;
+  let flushed = false;
 
   fdSync = openSync(filepath, "r");
   size = statSync(filepath).size;
@@ -68,11 +70,10 @@ export function createForwardReader(
           }
         }
 
-        if (pos >= size && !done) {
-          const parts = buffer.length > 0 ? buffer.split(delimiter) : [""];
-          for (const line of parts) {
-            local.push(line);
-          }
+        if (pos >= size && !flushed) {
+          flushed = true;
+
+          local.push(buffer.length > 0 ? buffer : "");
           buffer = "";
 
           while (local.length > 0 && !closed) {
@@ -132,11 +133,10 @@ export function createForwardReader(
       }
     }
 
-    if (pos >= size && !done) {
-      const parts = buffer.length > 0 ? buffer.split(delimiter) : [""];
-      for (const line of parts) {
-        local.push(line);
-      }
+    if (pos >= size && !flushed) {
+      flushed = true;
+
+      local.push(buffer.length > 0 ? buffer : "");
       buffer = "";
 
       while (local.length > 0) {

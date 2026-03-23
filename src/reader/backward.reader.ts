@@ -18,6 +18,7 @@ export function createBackwardReader(
   let buffer = "";
   let done = false;
   let closed = false;
+  let startsWithDelimiter = false;
 
   fdSync = openSync(filepath, "r");
   pos = statSync(filepath).size;
@@ -55,6 +56,10 @@ export function createBackwardReader(
 
           buffer = buf.toString("utf8") + buffer;
 
+          if (pos === 0 && buffer.startsWith(delimiter)) {
+            startsWithDelimiter = true;
+          }
+
           let idx: number;
           while ((idx = buffer.lastIndexOf(delimiter)) !== -1) {
             const line = buffer.slice(idx + delimiter.length);
@@ -69,7 +74,11 @@ export function createBackwardReader(
         }
 
         if (pos === 0 && !done) {
-          local.push(buffer);
+          if (buffer.length > 0) {
+            local.push(buffer);
+          } else if (startsWithDelimiter) {
+            local.push("");
+          }
           buffer = "";
 
           while (local.length > 0 && !closed) {
@@ -120,6 +129,10 @@ export function createBackwardReader(
 
       buffer = buf.toString("utf8") + buffer;
 
+      if (pos === 0 && buffer.startsWith(delimiter)) {
+        startsWithDelimiter = true;
+      }
+
       let idx: number;
       while ((idx = buffer.lastIndexOf(delimiter)) !== -1) {
         const line = buffer.slice(idx + delimiter.length);
@@ -134,7 +147,11 @@ export function createBackwardReader(
     }
 
     if (pos === 0 && !done) {
-      local.push(buffer);
+      if (buffer.length > 0) {
+        local.push(buffer);
+      } else if (startsWithDelimiter) {
+        local.push("");
+      }
       buffer = "";
 
       while (local.length > 0) {
