@@ -82,12 +82,10 @@ export function createBackwardReader(
           buffer = "";
 
           while (local.length > 0 && !closed) {
-            while (pageQueue.count >= pageQueue.capacity && !closed) {
-              await new Promise<void>((r) => setImmediate(r));
-            }
-            if (closed) break;
-            const sliceSize = Math.min(pageSize, local.length);
-            const page = local.splice(local.length - sliceSize, sliceSize);
+            const page = local.slice(
+              local.length - Math.min(pageSize, local.length),
+            );
+            local.length -= page.length;
             pageQueue.push(page);
           }
 
@@ -155,8 +153,10 @@ export function createBackwardReader(
       buffer = "";
 
       while (local.length > 0) {
-        const sliceSize = Math.min(pageSize, local.length);
-        const page = local.splice(local.length - sliceSize, sliceSize);
+        const page = local.slice(
+          local.length - Math.min(pageSize, local.length),
+        );
+        local.length -= page.length;
         pageQueue.push(page);
       }
 
@@ -216,16 +216,7 @@ export function createBackwardReader(
           yield p;
         }
       } finally {
-        closed = true;
-        done = true;
-        pageQueue.clear();
-
-        if (fd) {
-          try {
-            await fd.close();
-          } catch {}
-          fd = null;
-        }
+        await close();
       }
     },
     *[Symbol.iterator]() {
@@ -243,16 +234,16 @@ export function createBackwardReader(
         try {
           if (fdSync) {
             closeSync(fdSync);
-            fdSync = null;
           }
         } catch {}
+        fdSync = null;
 
         try {
           if (fd?.fd) {
             closeSync(fd.fd);
-            fd = null;
           }
         } catch {}
+        fd = null;
       }
     },
   };

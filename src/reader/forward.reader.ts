@@ -56,7 +56,7 @@ export function createForwardReader(
           const { bytesRead } = await fd.read(buf, 0, readSize, pos);
           pos += bytesRead;
 
-          buffer += buf.toString("utf8", 0, bytesRead);
+          buffer = buffer + buf.toString("utf8", 0, bytesRead);
 
           let idx: number;
           while ((idx = buffer.indexOf(delimiter)) !== -1) {
@@ -77,11 +77,9 @@ export function createForwardReader(
           buffer = "";
 
           while (local.length > 0 && !closed) {
-            while (pageQueue.count >= pageQueue.capacity && !closed) {
-              await new Promise<void>((r) => setImmediate(r));
-            }
-            if (closed) break;
-            pageQueue.push(local.splice(0, pageSize));
+            const page = local.slice(0, pageSize);
+            local.length -= page.length;
+            pageQueue.push(page);
           }
 
           done = true;
@@ -94,7 +92,7 @@ export function createForwardReader(
         }
 
         if (!done && !closed) {
-          await new Promise<void>((r) => setImmediate(r));
+          await new Promise((r) => setImmediate(r));
         }
       }
     } catch {
@@ -119,7 +117,7 @@ export function createForwardReader(
       const bytesRead = readSync(fdSync, buf, 0, readSize, pos);
       pos += bytesRead;
 
-      buffer += buf.toString("utf8", 0, bytesRead);
+      buffer = buffer + buf.toString("utf8", 0, bytesRead);
 
       let idx: number;
       while ((idx = buffer.indexOf(delimiter)) !== -1) {
@@ -140,7 +138,9 @@ export function createForwardReader(
       buffer = "";
 
       while (local.length > 0) {
-        pageQueue.push(local.splice(0, pageSize));
+        const page = local.slice(0, pageSize);
+        local.length -= page.length;
+        pageQueue.push(page);
       }
 
       done = true;
@@ -199,16 +199,7 @@ export function createForwardReader(
           yield p;
         }
       } finally {
-        closed = true;
-        done = true;
-        pageQueue.clear();
-
-        if (fd) {
-          try {
-            await fd.close();
-          } catch {}
-          fd = null;
-        }
+        await close();
       }
     },
     *[Symbol.iterator]() {
@@ -224,18 +215,18 @@ export function createForwardReader(
         pageQueue.clear();
 
         try {
-          if (fdSync) {
+          if (fdSync !== null) {
             closeSync(fdSync);
-            fdSync = null;
           }
         } catch {}
+        fdSync = null;
 
         try {
           if (fd?.fd) {
             closeSync(fd.fd);
-            fd = null;
           }
         } catch {}
+        fd = null;
       }
     },
   };
