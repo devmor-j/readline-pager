@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline/promises";
+import type { PagerOptions } from "../dist/main.mjs";
 import { createPager } from "../dist/main.mjs";
 import type { BenchmarkArgs } from "./_utils.ts";
 import {
@@ -163,13 +164,16 @@ async function runReadlinePager(
   batchSize: number,
   args: BenchmarkArgs,
 ) {
-  const pager = createPager(filepath, {
-    chunkSize: args["chunk-size"] ?? 100 * 1_024,
+  const options: PagerOptions = {
     pageSize: batchSize,
-    backward: args.backward ?? false,
-    prefetch: args.prefetch ?? 1,
-    useWorker: args["use-worker"] ?? false,
-  });
+  };
+
+  if (args["chunk-size"]) options.chunkSize = args["chunk-size"];
+  if (args.backward) options.backward = args.backward;
+  if (args.prefetch) options.prefetch = args.prefetch;
+  if (args["use-worker"]) options.useWorker = args["use-worker"];
+
+  const pager = createPager(filepath, options);
 
   const startTime = process.hrtime.bigint();
 
