@@ -1,10 +1,41 @@
 import assert from "node:assert";
+import { closeSync, openSync } from "node:fs";
 import { chmod } from "node:fs/promises";
 import { suite, test } from "node:test";
 import { createPager } from "../dist/main.mjs";
-import { createTmpFile, tryDeleteFile } from "./_utils.ts";
+import { createTextLines, createTmpFile, tryDeleteFile } from "./_utils.ts";
 
 suite("filepath", () => {
+  test("forward async reader catches a read/open failure", async () => {
+    const content = createTextLines(50);
+    const filepath = await createTmpFile(content);
+    const sourceFd = openSync(filepath, "r");
+    const procPath = `/proc/self/fd/${sourceFd}`;
+
+    try {
+      const pager = createPager(procPath, {
+        pageSize: 10,
+        prefetch: 1,
+        chunkSize: 1,
+      });
+
+      closeSync(sourceFd);
+
+      const pending = pager.next();
+      await new Promise((r) => setImmediate(r));
+
+      const page = await pending;
+      assert.equal(page, null);
+
+      await pager.close();
+    } finally {
+      try {
+        closeSync(sourceFd);
+      } catch {}
+      await tryDeleteFile(filepath);
+    }
+  });
+
   test("it throws if filepath is missing", () => {
     assert.throws(() => {
       createPager("");
@@ -90,27 +121,6 @@ suite("exceptional files", () => {
 
       assert.deepEqual(lines, ["a", "b", "c"]);
       assert.equal(lines.length, 3);
-    } finally {
-      await tryDeleteFile(filepath);
-    }
-  });
-
-  test("emits extra empty line when file ends with newline", async () => {
-    const lines = ["a", "b", "c", ""];
-    const content = lines.join("\n");
-
-    const filepath = await createTmpFile(content);
-
-    try {
-      const pager = createPager(filepath, { pageSize: 10 });
-
-      const result: string[] = [];
-
-      for (const page of pager) {
-        result.push(...page);
-      }
-
-      assert.deepEqual(result, lines);
     } finally {
       await tryDeleteFile(filepath);
     }

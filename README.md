@@ -52,13 +52,13 @@ for await (const page of pager) {
 for (const page of pager) {
 }
 
-// Classic while loop
+// Manual next
 while (true) {
   const page = await pager.next();
   if (!page) break;
 }
 
-// Precise condition while loop
+// Manual nextSync (also with condition variation)
 let page;
 while ((page = pager.nextSync()) !== null) {
   console.log(page[0]);
@@ -72,18 +72,18 @@ createPager(filepath, {
   chunkSize?: number,     // default: 64 * 1024 (64 KiB)
   pageSize?: number,      // default: 1_000
   delimiter?: string,     // default: "\n"
-  prefetch?: number,      // default: 1
+  prefetch?: number,      // default: 8
   backward?: boolean,     // default: false
-  useWorker?: boolean,    // default: false (forward only)
+  useWorker?: boolean,    // default: false
 });
 ```
 
 - `chunkSize` — number of bytes read per I/O operation.
 - `pageSize` — number of lines per page.
 - `delimiter` — line separator.
-- `prefetch` — maximum number of pages buffered internally. Usually not necessary to tune.
+- `prefetch` — maximum number of pages buffered internally.
 - `backward` — read the file from end → start (not supported with `useWorker`).
-- `useWorker` — offload parsing to a worker thread (forward reading only).
+- `useWorker` — offload reading to a worker thread (forward reading only).
 
 ---
 

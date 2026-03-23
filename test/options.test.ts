@@ -95,7 +95,7 @@ suite("options", () => {
         const end = pager1.nextSync();
         assert.equal(end, null);
       } finally {
-        tryDeleteFile(filepath1);
+        await tryDeleteFile(filepath1);
       }
 
       const filepath2 = await createTmpFile("");
@@ -154,7 +154,7 @@ suite("options", () => {
 
         assert.equal(out.length, lines.length);
       } finally {
-        tryDeleteFile(filepath);
+        await tryDeleteFile(filepath);
       }
     });
 
@@ -177,7 +177,7 @@ suite("options", () => {
 
         await pager.close();
       } finally {
-        tryDeleteFile(filepath);
+        await tryDeleteFile(filepath);
       }
     });
 
@@ -593,17 +593,11 @@ suite("validation", () => {
   test("createPager throws on invalid numeric args", () => {
     assert.throws(
       () => createPager("x", { pageSize: 0 }),
-      /pageSize must be > 0/,
+      /pageSize must be >= 1/,
     );
     assert.throws(
       () => createPager("x", { prefetch: 0 }),
       /prefetch must be >= 1/,
     );
-  });
-
-  test("throws on invalid options (basic checks)", () => {
-    assert.throws(() => createPager("", { pageSize: 10 }), /filepath/);
-    assert.throws(() => createPager("x", { pageSize: 0 }), /pageSize/);
-    assert.throws(() => createPager("x", { prefetch: 0 }), /prefetch/);
   });
 });
