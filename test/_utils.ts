@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const TMP_DIR = "./tmp";
+const TMP_DIR = "./tmp/test";
 
 export interface CreateTmpFileOptions {
   filename?: string;
@@ -102,6 +102,9 @@ export function parseProcessArgv(): BenchmarkArgs {
         setArg(key, value === undefined ? true : value === "true");
         break;
       }
+      default: {
+        console.warn(`[33mUnknown benchmark flag option <${key}>[0m`);
+      }
     }
   }
 
@@ -166,7 +169,7 @@ export function logThroughput(
   const throughput = fileMB / seconds;
 
   console.log(
-    `🚀 [${name}] ${elapsedMS.toFixed(2)} ms ==> Throughput: [33m[${throughput.toFixed(2)} MB/s][0m`,
+    `🚀 [${name}] ${Math.round(elapsedMS)} ms ==> Throughput: [33m[${Math.round(throughput)} MB/s][0m`,
   );
 }
 

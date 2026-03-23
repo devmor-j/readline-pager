@@ -13,14 +13,14 @@ export function createPager(
     chunkSize = 64 * 1_024,
     pageSize = 1_000,
     delimiter = "\n",
-    prefetch = 1,
+    prefetch = 8,
     backward = false,
     useWorker = false,
   } = options;
 
   if (!filepath) throw new Error("filepath required");
-  if (pageSize <= 0) throw new RangeError("pageSize must be > 0");
-  if (prefetch <= 0) throw new RangeError("prefetch must be >= 1");
+  if (pageSize < 1) throw new RangeError("pageSize must be >= 1");
+  if (prefetch < 1) throw new RangeError("prefetch must be >= 1");
 
   if (backward && useWorker)
     throw new Error("backward not supported with useWorker");
@@ -43,5 +43,7 @@ export function createPager(
 }
 
 export default createPager;
+
+// export { createNativePager } from "./native.js";
 
 export type * from "./types.js";

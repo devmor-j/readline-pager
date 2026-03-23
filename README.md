@@ -12,17 +12,18 @@
   <img src="https://img.shields.io/github/stars/devmor-j/readline-pager" alt="stars">
 </p>
 
-⚡ Memory-efficient, paginated file reader for Node.js with async iteration, prefetching, backward reading and optional worker support. `readline-pager` reads large text files page-by-page without loading the entire file into memory.
+⚡ Memory-efficient paginated file reader for Node.js with async and sync iteration, prefetching, backward reading, and optional worker support. `readline-pager` reads large text files page-by-page without loading the entire file into memory.
 
 - ✅ Zero dependencies
 - ✅ Async iterator (`for await...of`) + manual `next()` API
+- ✅ Sync iterator (`for...of`) + manual `nextSync()` API
 - ✅ Forward & backward reading (EOF → BOF)
 - ✅ Optional worker thread mode (forward only)
-- ✅ Up to ~3x faster than Node.js `readline`
+- ✅ Up to ~3× faster than Node.js `readline`
 - ✅ ~97% test coverage & fully typed (TypeScript)
 
-> **Important:**
-> Performance is heavily dependent on the `chunkSize` option; ensure you fine-tune it for your specific I/O hardware. A setting of **64 KB** is typically a good starting point. Increasing it might gradually improve read speeds, usually reaching an optimal peak depending on your hardware's capabilities.
+> **Important:**  
+> Performance depends heavily on the `chunkSize` option. Tune it for your specific I/O hardware. A value of **64 KB** is usually a good starting point. Increasing it may gradually improve throughput until reaching the optimal point for your hardware.
 
 ---
 
@@ -42,30 +43,27 @@ import { createPager } from "readline-pager";
 
 const pager = createPager("./bigfile.txt");
 
+// Async iteration
 for await (const page of pager) {
   console.log(page[0]); // first line of the current page
 }
-```
 
----
+// Sync iteration
+for (const page of pager) {
+}
 
-**Recommended for highest throughput:**
-
-```ts
+// Manual next
 while (true) {
   const page = await pager.next();
   if (!page) break;
 }
 
-// or
+// Manual nextSync (also with condition variation)
 let page;
-while ((page = await pager.next()) !== null) {}
+while ((page = pager.nextSync()) !== null) {
+  console.log(page[0]);
+}
 ```
-
-- `while + next()` is the fastest iteration method (avoids extra async-iterator overhead).
-- `for await of` is more ergonomic and convenient.
-
----
 
 ## ⚙️ Options
 
@@ -74,18 +72,18 @@ createPager(filepath, {
   chunkSize?: number,     // default: 64 * 1024 (64 KiB)
   pageSize?: number,      // default: 1_000
   delimiter?: string,     // default: "\n"
-  prefetch?: number,      // default: 1
+  prefetch?: number,      // default: 8
   backward?: boolean,     // default: false
-  useWorker?: boolean,    // default: false (forward only)
+  useWorker?: boolean,    // default: false
 });
 ```
 
 - `chunkSize` — number of bytes read per I/O operation.
 - `pageSize` — number of lines per page.
 - `delimiter` — line separator.
-- `prefetch` — max number of pages buffered internally. Not required for typical use; tuning has little effect once the engine is optimized.
-- `backward` — read file from end → start (not supported with `useWorker`).
-- `useWorker` — offload parsing to a worker thread (forward only).
+- `prefetch` — maximum number of pages buffered internally.
+- `backward` — read the file from end → start (not supported with `useWorker`).
+- `useWorker` — offload reading to a worker thread (forward reading only).
 
 ---
 
@@ -93,24 +91,33 @@ createPager(filepath, {
 
 ### `pager.next(): Promise<string[] | null>`
 
-Returns the next page or `null` when finished. Empty lines are preserved.
+Returns the next page asynchronously.
 
-**Note:** Unlike Node.js `readline`, which may skip empty files or leading empty lines, `readline-pager` always returns all lines.
+Returns `null` when the end of the file is reached.
 
-- A completely empty file (`0` bytes) produces `[""]` on the first read.
-- A file with multiple empty lines returns each line as an empty string (e.g., `["", ""]` for two empty lines). Node.js `readline` may emit fewer or no `line` events in these cases.
+Empty lines are preserved.
+
+---
+
+### `pager.nextSync(): string[] | null`
+
+Synchronous version of `pager.next()`.
+
+Returns the next page immediately or `null` when the end of the file is reached.
+
+---
 
 ### `pager.close(): Promise<void>`
 
-Stops reading and releases resources immediately. Safe to call at any time.
-
-### Read-only properties
-
-- `pager.lineCount` — lines emitted so far
-- `pager.firstLine` — first emitted line (available after first read)
-- `pager.lastLine` — last emitted line (updated per page)
+Stops reading and releases resources asynchronously. Safe to call at any time.
 
 ---
+
+**Note:**
+Unlike Node.js `readline`, which may skip empty files or leading empty lines, `readline-pager` always returns all lines.
+
+- A completely empty file (`0` bytes) produces `[""]` on the first read.
+- A file containing multiple empty lines returns each line as an empty string (for example `["", ""]` for two empty lines).
 
 ## 📊 Benchmark
 
