@@ -172,7 +172,7 @@ export function createBackwardReader(
   async function next() {
     if (closed) return null;
 
-    const page = await pageQueue.shift(done);
+    const page = await pageQueue.shift();
     return page;
   }
 

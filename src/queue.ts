@@ -57,9 +57,8 @@ export function createRingBuffer<T>(capacity: number) {
     return v;
   }
 
-  async function shift(done = false): Promise<T | null> {
+  async function shift(): Promise<T | null> {
     if (count) return shiftSync();
-    if (done) return null;
 
     await new Promise<void>((r) => {
       consumerWaiter = r;
