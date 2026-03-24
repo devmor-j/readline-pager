@@ -8,7 +8,6 @@
         "-std=c++23",
         "-fno-exceptions",
         "-Wall",
-        "-mavx2",
         "-fPIC"
       ],
       "xcode_settings": {

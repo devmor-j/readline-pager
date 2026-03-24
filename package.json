@@ -53,6 +53,14 @@
     "backward-reading"
   ],
   "description": "Memory-efficient, paginated file reader for Node.js with async iteration, prefetching, backward reading and optional worker support.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/devmor-j/readline-pager.git"
+  },
+  "homepage": "https://github.com/devmor-j/readline-pager#readme",
+  "bugs": {
+    "url": "https://github.com/devmor-j/readline-pager/issues"
+  },
   "engines": {
     "node": ">=18.12"
   },

@@ -6,7 +6,9 @@
 #include <atomic>
 #include <condition_variable>
 #include <fcntl.h>
+#if defined(__x86_64__) || defined(__i386__)
 #include <immintrin.h>
+#endif
 #include <mutex>
 #include <node_api.h>
 #include <stop_token>
@@ -107,6 +109,9 @@ static inline bool queue_pop(PagerState *st, PageBoundary &out) {
   return true;
 }
 
+#if defined(__x86_64__) || defined(__i386__)
+__attribute__((target("avx2")))
+#endif
 static void scan_avx2(std::stop_token stop, PagerState *st) {
   size_t i = 0;
   const size_t size = st->filesize;
