@@ -34,7 +34,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "prebuilds"
   ],
   "keywords": [
     "nodejs",
