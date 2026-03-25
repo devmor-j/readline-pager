@@ -58,6 +58,12 @@ const pkg = {
   main: jsFilename,
   os: [platform],
   cpu: [arch],
+  ...(platform === "linux" && {
+    libc: [libc || "glibc"],
+  }),
+  peerDependencies: {
+    "readline-pager": version,
+  },
   files: [jsFilename, nativeFilename],
   repository: {
     type: "git",
