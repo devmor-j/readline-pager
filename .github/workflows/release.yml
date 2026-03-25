@@ -9,67 +9,61 @@ on:
 jobs:
   publish-native:
     name: Publish ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-    container: ${{ matrix.container || '' }}
+    runs-on: ubuntu-latest
 
     permissions:
-      id-token: write
       contents: read
+      id-token: write
 
     strategy:
       fail-fast: true
       max-parallel: 1
       matrix:
         include:
-          - os: ubuntu-latest
-            name: linux-x64
+          - name: linux-x64
             platform: linux
             arch: x64
-
-          - os: ubuntu-latest
-            name: linux-arm64
+          - name: linux-arm64
             platform: linux
             arch: arm64
-
-          - os: ubuntu-latest
-            name: linux-musl-x64
+          - name: linux-musl-x64
             platform: linux
             arch: x64
-            libc: musl
+            musl: true
             container: node:24-alpine
-
-          - os: ubuntu-latest
-            name: linux-musl-arm64
+          - name: linux-musl-arm64
             platform: linux
             arch: arm64
-            libc: musl
+            musl: true
             container: node:24-alpine
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
 
-      - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
+          cache: "npm"
 
       - name: Install build tools (musl)
-        if: contains(matrix.name, 'musl')
-        run: apk add --no-cache python3 make g++ linux-headers
+        if: matrix.musl == true
+        run: |
+          apk add --no-cache python3 make g++ linux-headers
 
-      - run: npm i --no-fund --no-audit
+      - name: Install dependencies for native
+        run: npm i --no-audit --no-fund
 
       - name: Build native
         run: npm run build:native
 
-      - name: Generate package
+      - name: Package native module
         env:
           TARGET_PLATFORM: ${{ matrix.platform }}
           TARGET_ARCH: ${{ matrix.arch }}
           TARGET_LIBC: ${{ matrix.libc || '' }}
         run: node scripts/package-native.ts "$TARGET_PLATFORM" "$TARGET_ARCH" "$TARGET_LIBC"
 
-      - name: Publish
+      - name: Publish native package
         working-directory: pkg
         run: npm publish --access public
 
@@ -78,18 +72,21 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      id-token: write
       contents: read
+      id-token: write
 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
+          cache: "npm"
 
-      - run: npm i --no-fund --no-audit
-      - run: npm run build:js
+      - name: Install full deps (for JS build)
+        run: npm i --no-audit --no-fund
 
-      - run: npm publish --access public
+      - name: Build main package
+        run: npm run build:js
+
+      - name: Publish main
+        run: npm publish --access public
