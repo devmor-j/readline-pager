@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish-native:
+    name: Publish ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: darwin-x64
+            platform: darwin
+            arch: x64
+
+          - os: macos-latest
+            name: darwin-arm64
+            platform: darwin
+            arch: arm64
+
+          - os: ubuntu-latest
+            name: linux-x64
+            platform: linux
+            arch: x64
+
+          - os: ubuntu-latest
+            name: linux-arm64
+            platform: linux
+            arch: arm64
+
+          - os: ubuntu-latest
+            name: linux-musl-x64
+            platform: linux
+            arch: x64
+            libc: musl
+            container: node:24-alpine
+
+          - os: ubuntu-latest
+            name: linux-musl-arm64
+            platform: linux
+            arch: arm64
+            libc: musl
+            container: node:24-alpine
+
+          - os: windows-latest
+            name: win32-x64
+            platform: win32
+            arch: x64
+
+          - os: windows-latest
+            name: win32-arm64
+            platform: win32
+            arch: arm64
+
+    container: ${{ matrix.container || '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - name: Build native
+        run: npm run build:native
+
+      - name: Generate package
+        run: node scripts/package-native.js ${{ matrix.platform }} ${{ matrix.arch }} ${{ matrix.libc || '' }}
+
+      - name: Publish
+        working-directory: pkg
+        run: npm publish --access public
+
+  publish-main:
+    needs: publish-native
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+      - run: npm run build:js
+
+      - run: npm publish --access public

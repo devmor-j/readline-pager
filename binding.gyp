@@ -1,7 +1,7 @@
 {
   "targets": [
     {
-      "target_name": "pager",
+      "target_name": "readline-pager",
       "sources": [ "src/native/pager.native.cc" ],
       "cflags_cc": [
         "-O3",
