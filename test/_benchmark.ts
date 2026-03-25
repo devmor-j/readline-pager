@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import type { PagerOptions } from "../dist/main.mjs";
-import { createPager } from "../dist/main.mjs";
+import { createNativePager, createPager } from "../dist/main.mjs";
 import type { BenchmarkArgs } from "./_utils.ts";
 import {
   createBigTmpFile,
@@ -190,6 +190,27 @@ async function runReadlinePager(
   };
 }
 
+async function runNativeReadlinePager(filepath: string, batchSize: number) {
+  try {
+    const pager = createNativePager(filepath, {
+      pageSize: batchSize,
+    });
+
+    const startTime = process.hrtime.bigint();
+
+    for await (const page of pager) {
+      for (const line of page) {
+      }
+    }
+
+    const endTime = process.hrtime.bigint();
+
+    return { startTime, endTime };
+  } catch {
+    return null;
+  }
+}
+
 async function benchmark(args = parseProcessArgv()) {
   const LINES = args.lines ?? 1e7;
   const BATCH_SIZE = args["page-size"] ?? 1_000;
@@ -206,7 +227,7 @@ async function benchmark(args = parseProcessArgv()) {
 
   {
     const { startTime, endTime } = await runNodeReadline(filepath);
-    logThroughput("node:line", endTime, startTime, filebytes);
+    logThroughput("readline", endTime, startTime, filebytes);
   }
 
   if (runtime === "Deno") {
@@ -245,7 +266,20 @@ async function benchmark(args = parseProcessArgv()) {
       BATCH_SIZE,
       args,
     );
-    logThroughput("readline-pager", endTime, startTime, filebytes);
+    logThroughput("readline-pager:js", endTime, startTime, filebytes);
+  }
+
+  {
+    const result = await runNativeReadlinePager(filepath, BATCH_SIZE);
+
+    if (result) {
+      logThroughput(
+        "readline-pager:cpp",
+        result.endTime,
+        result.startTime,
+        filebytes,
+      );
+    }
   }
 
   console.log("-".repeat(60));
