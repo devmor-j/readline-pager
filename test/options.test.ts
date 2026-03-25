@@ -1,8 +1,15 @@
 import assert from "node:assert";
 import { truncateSync } from "node:fs";
-import { suite, test } from "node:test";
+import { after, suite, test } from "node:test";
 import { createPager } from "../dist/main.mjs";
-import { createTextLines, createTmpFile, tryDeleteFile } from "./_utils.ts";
+import {
+  createTextLines,
+  createTmpFile,
+  runTestCleanup,
+  tryDeleteFile,
+} from "./_utils.ts";
+
+after(runTestCleanup);
 
 suite("options", () => {
   suite("with defaults", () => {

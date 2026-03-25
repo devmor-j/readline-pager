@@ -20,7 +20,7 @@
 - ✅ Forward & backward reading (EOF → BOF)
 - ✅ Optional worker thread mode (forward only)
 - ✅ Up to ~3× faster than Node.js `readline`
-- ✅ ~97% test coverage & fully typed (TypeScript)
+- ✅ ~95% test coverage & fully typed (TypeScript)
 
 > **Important:**  
 > Performance depends heavily on the `chunkSize` option. Tune it for your specific I/O hardware. A value of **64 KB** is usually a good starting point. Increasing it may gradually improve throughput until reaching the optimal point for your hardware.

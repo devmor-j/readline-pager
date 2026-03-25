@@ -3,8 +3,11 @@ import { execFile } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { suite, test } from "node:test";
+import { after, suite, test } from "node:test";
 import { promisify } from "node:util";
+import { runTestCleanup } from "./_utils.ts";
+
+after(runTestCleanup);
 
 const exec = promisify(execFile);
 const pkgRoot = process.cwd();

@@ -6,7 +6,7 @@
     "build:native": "node-gyp rebuild",
     "build": "npm run build:native && npm run build:js",
     "pretest": "npm run build",
-    "test": "node --test --experimental-test-coverage test/**/*.test.ts",
+    "test": "TEST_CLEANUPS=1 node --test --experimental-test-coverage test/**/*.test.ts",
     "prepublishOnly": "npm run build && npm run test",
     "benchmark": "node test/_benchmark.ts; deno --allow-write --allow-read test/_benchmark.ts; bun test/_benchmark.ts;"
   },

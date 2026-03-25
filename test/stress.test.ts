@@ -1,7 +1,14 @@
 import assert from "node:assert";
-import { suite, test } from "node:test";
+import { after, suite, test } from "node:test";
 import { createPager } from "../dist/main.mjs";
-import { createTextLines, createTmpFile, tryDeleteFile } from "./_utils.ts";
+import {
+  createTextLines,
+  createTmpFile,
+  runTestCleanup,
+  tryDeleteFile,
+} from "./_utils.ts";
+
+after(runTestCleanup);
 
 suite("stress", () => {
   test("small prefetch capacity does not overwrite or drop pages under load", async () => {

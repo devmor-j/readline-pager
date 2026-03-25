@@ -32,11 +32,18 @@ export function createPager(
     delimiter,
   };
 
-  return useWorker
+  const reader = useWorker
     ? createWorkerReader(filepath, _options)
     : backward
       ? createBackwardReader(filepath, _options)
       : createForwardReader(filepath, _options);
+
+  if (process.env.TEST_CLEANUPS) {
+    (globalThis as any).__test_cleanups__ ??= [];
+    (globalThis as any).__test_cleanups__.push(reader.close);
+  }
+
+  return reader;
 }
 
 export default createPager;
