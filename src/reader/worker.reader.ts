@@ -13,7 +13,7 @@ export function createWorkerReader(
   filepath: string,
   options: ReaderOptions,
 ): Pager {
-  const { chunkSize, pageSize, delimiter, prefetch } = options;
+  const { prefetch } = options;
 
   const pageQueue = createRingBuffer<string[]>(Math.max(2, prefetch + 1));
 
@@ -21,7 +21,10 @@ export function createWorkerReader(
   let closed = false;
 
   const worker = new Worker(new URL(workerFile, import.meta.url), {
-    workerData: { filepath, chunkSize, pageSize, delimiter, prefetch },
+    workerData: {
+      filepath,
+      options,
+    },
   });
 
   worker.on("message", (msg: any) => {
@@ -48,7 +51,7 @@ export function createWorkerReader(
   async function next() {
     if (closed) return null;
 
-    const page = await pageQueue.shift(done);
+    const page = await pageQueue.shift();
     return page;
   }
 

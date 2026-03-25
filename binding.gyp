@@ -1,14 +1,13 @@
 {
   "targets": [
     {
-      "target_name": "pager",
+      "target_name": "readline-pager",
       "sources": [ "src/native/pager.native.cc" ],
       "cflags_cc": [
         "-O3",
         "-std=c++23",
         "-fno-exceptions",
         "-Wall",
-        "-mavx2",
         "-fPIC"
       ],
       "xcode_settings": {

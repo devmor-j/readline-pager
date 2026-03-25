@@ -3,23 +3,33 @@
   "version": "0.3.1",
   "scripts": {
     "build:js": "tsdown",
-    "build:native": "prebuildify --napi --strip && rm -rf ./build",
+    "build:native": "node-gyp rebuild",
     "build": "npm run build:native && npm run build:js",
+    "pkg:native": "node scripts/package-native.ts linux x64",
     "pretest": "npm run build",
-    "test": "node --test --experimental-test-coverage test/**/*.test.ts",
+    "test": "TEST_CLEANUPS=1 node --test --experimental-test-coverage test/**/*.test.ts",
     "prepublishOnly": "npm run build && npm run test",
-    "benchmark": "node test/_benchmark.ts; bun test/_benchmark.ts; deno --allow-write --allow-read test/_benchmark.ts"
+    "benchmark": "node test/_benchmark.ts; deno --allow-write --allow-read test/_benchmark.ts; bun test/_benchmark.ts;"
   },
   "devDependencies": {
     "@types/bun": "~1.3.11",
     "@types/deno": "~2.5.0",
     "@types/node": "~25.5.0",
     "node-gyp": "~12.2.0",
-    "prebuildify": "~6.0.1",
     "prettier": "~3.8.1",
     "prettier-plugin-organize-imports": "~4.3.0",
-    "tsdown": "~0.21.4",
-    "typescript": "~5.9.3"
+    "tsdown": "~0.21.5",
+    "typescript": "~6.0.2"
+  },
+  "optionalDependencies": {
+    "@devmor-j/readline-pager-darwin-arm64": "0.3.1",
+    "@devmor-j/readline-pager-darwin-x64": "0.3.1",
+    "@devmor-j/readline-pager-linux-arm64": "0.3.1",
+    "@devmor-j/readline-pager-linux-x64": "0.3.1",
+    "@devmor-j/readline-pager-linux-musl-arm64": "0.3.1",
+    "@devmor-j/readline-pager-linux-musl-x64": "0.3.1",
+    "@devmor-j/readline-pager-win32-arm64": "0.3.1",
+    "@devmor-j/readline-pager-win32-x64": "0.3.1"
   },
   "gypfile": false,
   "type": "module",
@@ -52,6 +62,14 @@
     "backward-reading"
   ],
   "description": "Memory-efficient, paginated file reader for Node.js with async iteration, prefetching, backward reading and optional worker support.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/devmor-j/readline-pager.git"
+  },
+  "homepage": "https://github.com/devmor-j/readline-pager#readme",
+  "bugs": {
+    "url": "https://github.com/devmor-j/readline-pager/issues"
+  },
   "engines": {
     "node": ">=18.12"
   },

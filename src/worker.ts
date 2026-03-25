@@ -1,7 +1,9 @@
 import { open } from "node:fs/promises";
 import { parentPort, workerData } from "node:worker_threads";
+import { ReaderOptions } from "./types.js";
 
-const { filepath, chunkSize, pageSize, delimiter } = workerData;
+const { filepath, options } = workerData;
+const { chunkSize, pageSize, delimiter } = options as ReaderOptions;
 
 (async () => {
   const fd = await open(filepath, "r");

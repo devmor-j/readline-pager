@@ -6,7 +6,9 @@
 #include <atomic>
 #include <condition_variable>
 #include <fcntl.h>
+#if defined(__x86_64__) || defined(__i386__)
 #include <immintrin.h>
+#endif
 #include <mutex>
 #include <node_api.h>
 #include <stop_token>
@@ -21,7 +23,7 @@
 #include <sys/auxv.h>
 #endif
 
-enum class CpuFeature { Scalar, AVX2, Neon };
+enum class CpuFeature { AVX2, Neon, Unsupported };
 
 static CpuFeature detect_cpu() {
 #if defined(__x86_64__) || defined(__i386__)
@@ -33,7 +35,7 @@ static CpuFeature detect_cpu() {
   if (getauxval(AT_HWCAP) & HWCAP_NEON)
     return CpuFeature::Neon;
 #endif
-  return CpuFeature::Scalar;
+  return CpuFeature::Unsupported;
 }
 
 struct PageBoundary {
@@ -107,6 +109,9 @@ static inline bool queue_pop(PagerState *st, PageBoundary &out) {
   return true;
 }
 
+#if defined(__x86_64__) || defined(__i386__)
+__attribute__((target("avx2")))
+#endif
 static void scan_avx2(std::stop_token stop, PagerState *st) {
   size_t i = 0;
   const size_t size = st->filesize;
@@ -205,18 +210,28 @@ static void scan_neon(std::stop_token stop, PagerState *st) {
 static void background_scanner(std::stop_token stop, PagerState *st) {
   CpuFeature feature = detect_cpu();
 
-  if (feature == CpuFeature::AVX2)
+  if (feature == CpuFeature::AVX2) {
     scan_avx2(stop, st);
-  else if (feature == CpuFeature::Neon)
+  } else if (feature == CpuFeature::Neon) {
     scan_neon(stop, st);
-  else
-    scan_avx2(stop, st);
+  } else {
+    st->scan_finished = true;
+    st->cv.notify_all();
+    return;
+  }
 
   st->scan_finished = true;
   st->cv.notify_all();
 }
 
 static napi_value Open(napi_env env, napi_callback_info info) {
+  CpuFeature feature = detect_cpu();
+  if (feature == CpuFeature::Unsupported) {
+    napi_throw_error(env, nullptr,
+                     "Unsupported CPU: requires AVX2 or ARM NEON");
+    return nullptr;
+  }
+
   size_t argc = 3;
   napi_value argv[3], external;
   napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);

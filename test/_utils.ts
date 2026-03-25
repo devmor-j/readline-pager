@@ -180,3 +180,24 @@ export function whatRuntime() {
       ? "Deno"
       : "Node";
 }
+
+export async function runTestCleanup() {
+  const cleanups: Function[] = (globalThis as any).__test_cleanups__;
+
+  if (cleanups?.length) {
+    let failedCount = 0;
+
+    for (const cleanup of cleanups) {
+      try {
+        await cleanup();
+      } catch (err) {
+        failedCount++;
+        console.error(err);
+      }
+    }
+
+    if (failedCount > 0) {
+      console.log(`[41mFailed cleanups: ${failedCount}[0m`);
+    }
+  }
+}

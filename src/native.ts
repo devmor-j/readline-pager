@@ -1,7 +1,5 @@
 import { createRequire } from "node:module";
 import { arch, platform } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { Pager } from "./types.js";
 
 const require = createRequire(import.meta.url);
@@ -16,30 +14,44 @@ interface NativeAddon {
   close: (fd: AddonFD) => Promise<void>;
 }
 
-function loadNativeAddon(): NativeAddon {
+function isMusl(): boolean {
+  if (platform() !== "linux") return false;
+
+  try {
+    const report = process.report?.getReport?.() as any;
+    return !report?.header?.glibcVersionRuntime;
+  } catch {
+    return false;
+  }
+}
+
+function getPackageName(): string {
   const p = platform();
   const a = arch();
 
-  const getDirname = () => {
-    try {
-      return dirname(fileURLToPath(import.meta.url));
-    } catch {
-      return __dirname;
+  switch (p) {
+    case "darwin":
+    case "win32": {
+      return `@devmor-j/readline-pager-${p}-${a}`;
     }
-  };
+    case "linux": {
+      const libc = isMusl() ? "musl-" : "";
+      return `@devmor-j/readline-pager-${p}-${libc}${a}`;
+    }
+    default: {
+      throw new Error(`Unsupported platform: ${p}/${a}`);
+    }
+  }
+}
 
-  const addonPath = join(
-    getDirname(),
-    "..",
-    "prebuilds",
-    `${p}-${a}`,
-    "readline-pager.node",
-  );
-
+function loadNativeAddon(): NativeAddon {
   try {
-    return require(addonPath);
+    return require(getPackageName());
   } catch {
-    throw new Error("native addon not found, please run build script.");
+    const p = platform();
+    const a = arch();
+    const UNAVAILABLE = `Native addon not available for ${p}/${a}.`;
+    throw new Error(UNAVAILABLE);
   }
 }
 

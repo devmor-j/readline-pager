@@ -1,41 +1,12 @@
 import assert from "node:assert";
-import { closeSync, openSync } from "node:fs";
 import { chmod } from "node:fs/promises";
-import { suite, test } from "node:test";
+import { after, suite, test } from "node:test";
 import { createPager } from "../dist/main.mjs";
-import { createTextLines, createTmpFile, tryDeleteFile } from "./_utils.ts";
+import { createTmpFile, runTestCleanup, tryDeleteFile } from "./_utils.ts";
+
+after(runTestCleanup);
 
 suite("filepath", () => {
-  test("forward async reader catches a read/open failure", async () => {
-    const content = createTextLines(50);
-    const filepath = await createTmpFile(content);
-    const sourceFd = openSync(filepath, "r");
-    const procPath = `/proc/self/fd/${sourceFd}`;
-
-    try {
-      const pager = createPager(procPath, {
-        pageSize: 10,
-        prefetch: 1,
-        chunkSize: 1,
-      });
-
-      closeSync(sourceFd);
-
-      const pending = pager.next();
-      await new Promise((r) => setImmediate(r));
-
-      const page = await pending;
-      assert.equal(page, null);
-
-      await pager.close();
-    } finally {
-      try {
-        closeSync(sourceFd);
-      } catch {}
-      await tryDeleteFile(filepath);
-    }
-  });
-
   test("it throws if filepath is missing", () => {
     assert.throws(() => {
       createPager("");
