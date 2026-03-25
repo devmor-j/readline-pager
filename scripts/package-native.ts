@@ -1,27 +1,51 @@
-import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { execSync } from "node:child_process";
+import {
+  cpSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 
-const [platform, arch, libc] = process.argv.slice(2);
+const [argPlatform, argArch, argLibc] = process.argv.slice(2);
 
-if (!platform || !arch) {
-  console.error(
-    "Usage: node scripts/package-native.js <platform> <arch> [libc]",
-  );
-  process.exit(1);
+const platform = process.env.TARGET_PLATFORM || argPlatform || process.platform;
+const arch = process.env.TARGET_ARCH || argArch || process.arch;
+
+let libc = process.env.TARGET_LIBC || argLibc || "";
+if (!libc && platform === "linux") {
+  try {
+    const lddOutput = execSync("ldd --version 2>&1", { encoding: "utf8" });
+    if (lddOutput.includes("musl")) libc = "musl";
+  } catch {}
+}
+
+const libcSuffix = platform === "linux" && libc === "musl" ? "-musl" : "";
+
+let version = process.env.npm_package_version;
+if (!version) {
+  try {
+    const pkgRoot = JSON.parse(
+      readFileSync(join(process.cwd(), "package.json"), "utf8"),
+    );
+    version = pkgRoot.version;
+  } catch (err) {
+    console.error("Unable to determine package version:", err);
+    process.exit(1);
+  }
 }
 
 const outDir = join(process.cwd(), "pkg");
-const libcSuffix = platform === "linux" && libc === "musl" ? "-musl" : "";
 const pkgName = `@devmor-j/readline-pager-${platform}${libcSuffix}-${arch}`;
 const nativeFilename = "readline-pager.node";
 const jsFilename = "index.js";
-const version = process.env.npm_package_version;
 
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
-cpSync(`build/Release/${nativeFilename}`, join(outDir, nativeFilename));
+cpSync(join("build", "Release", nativeFilename), join(outDir, nativeFilename));
 
 writeFileSync(
   join(outDir, jsFilename),

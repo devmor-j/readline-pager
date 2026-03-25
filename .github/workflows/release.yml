@@ -10,25 +10,17 @@ jobs:
   publish-native:
     name: Publish ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container || '' }}
 
     permissions:
       id-token: write
       contents: read
 
     strategy:
-      fail-fast: false
+      fail-fast: true
+      max-parallel: 1
       matrix:
         include:
-          - os: macos-latest
-            name: darwin-x64
-            platform: darwin
-            arch: x64
-
-          - os: macos-latest
-            name: darwin-arm64
-            platform: darwin
-            arch: arm64
-
           - os: ubuntu-latest
             name: linux-x64
             platform: linux
@@ -53,18 +45,6 @@ jobs:
             libc: musl
             container: node:24-alpine
 
-          - os: windows-latest
-            name: win32-x64
-            platform: win32
-            arch: x64
-
-          - os: windows-latest
-            name: win32-arm64
-            platform: win32
-            arch: arm64
-
-    container: ${{ matrix.container || '' }}
-
     steps:
       - uses: actions/checkout@v4
 
@@ -73,13 +53,21 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
-      - run: npm ci
+      - name: Install build tools (musl)
+        if: contains(matrix.name, 'musl')
+        run: apk add --no-cache python3 make g++ linux-headers
+
+      - run: npm i --no-fund --no-audit
 
       - name: Build native
         run: npm run build:native
 
       - name: Generate package
-        run: node scripts/package-native.js ${{ matrix.platform }} ${{ matrix.arch }} ${{ matrix.libc || '' }}
+        env:
+          TARGET_PLATFORM: ${{ matrix.platform }}
+          TARGET_ARCH: ${{ matrix.arch }}
+          TARGET_LIBC: ${{ matrix.libc || '' }}
+        run: node scripts/package-native.ts "$TARGET_PLATFORM" "$TARGET_ARCH" "$TARGET_LIBC"
 
       - name: Publish
         working-directory: pkg
@@ -101,7 +89,7 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
-      - run: npm ci
+      - run: npm i --no-fund --no-audit
       - run: npm run build:js
 
       - run: npm publish --access public
