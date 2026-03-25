@@ -23,52 +23,80 @@ jobs:
           - name: linux-x64
             platform: linux
             arch: x64
+
           - name: linux-arm64
             platform: linux
             arch: arm64
-          - name: linux-musl-x64
-            platform: linux
-            arch: x64
-            musl: true
-            container: node:24-alpine
-          - name: linux-musl-arm64
-            platform: linux
-            arch: arm64
-            musl: true
-            container: node:24-alpine
 
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-node@v6
 
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: "npm"
 
-      - name: Install build tools (musl)
-        if: matrix.musl == true
-        run: |
-          apk add --no-cache python3 make g++ linux-headers
-
-      - name: Install dependencies for native
+      - name: Install deps
         run: npm i --no-audit --no-fund
 
       - name: Build native
         run: npm run build:native
 
-      - name: Package native module
+      - name: Package native
         env:
           TARGET_PLATFORM: ${{ matrix.platform }}
           TARGET_ARCH: ${{ matrix.arch }}
-          TARGET_LIBC: ${{ matrix.libc || '' }}
-        run: node scripts/package-native.ts "$TARGET_PLATFORM" "$TARGET_ARCH" "$TARGET_LIBC"
+        run: node scripts/package-native.ts
 
-      - name: Publish native package
+      - name: Publish
+        working-directory: pkg
+        run: npm publish --access public
+
+  publish-native-musl:
+    name: Publish ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    container: node:24-alpine
+
+    permissions:
+      contents: read
+      id-token: write
+
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        include:
+          - name: linux-musl-x64
+            arch: x64
+
+          - name: linux-musl-arm64
+            arch: arm64
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install build tools
+        run: apk add --no-cache python3 make g++ linux-headers
+
+      - name: Install deps
+        run: npm i --no-audit --no-fund
+
+      - name: Build native
+        run: npm run build:native
+
+      - name: Package native
+        env:
+          TARGET_PLATFORM: linux
+          TARGET_ARCH: ${{ matrix.arch }}
+          TARGET_LIBC: musl
+        run: node scripts/package-native.ts
+
+      - name: Publish
         working-directory: pkg
         run: npm publish --access public
 
   publish-main:
-    needs: publish-native
+    needs: [publish-native, publish-native-musl]
     runs-on: ubuntu-latest
 
     permissions:
@@ -77,15 +105,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: "npm"
 
-      - name: Install full deps (for JS build)
+      - name: Install deps
         run: npm i --no-audit --no-fund
 
-      - name: Build main package
+      - name: Build js
         run: npm run build:js
 
       - name: Publish main
