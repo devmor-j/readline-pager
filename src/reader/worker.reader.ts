@@ -50,16 +50,12 @@ export function createWorkerReader(
 
   async function next() {
     if (closed) return null;
-
-    const page = await pageQueue.shift();
-    return page;
+    return pageQueue.shift(done);
   }
 
   function nextSync() {
     if (closed) return null;
-
-    const page = pageQueue.shiftSync();
-    return page;
+    return pageQueue.shiftSync();
   }
 
   async function close() {

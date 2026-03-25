@@ -46,6 +46,38 @@ suite("apis", () => {
         await tryDeleteFile(filepath);
       }
     });
+
+    test("next() returns null repeatedly after reading is done", async () => {
+      const content = createTextLines(3);
+      const filepath = await createTmpFile(content);
+
+      try {
+        const pager = createPager(filepath, {
+          pageSize: 2,
+          prefetch: 1,
+          chunkSize: 16,
+        });
+
+        while (true) {
+          const p = await pager.next();
+          if (!p) break;
+        }
+
+        let nullCount = 0;
+        let loopCount = 0;
+
+        while (true) {
+          const page = await pager.next();
+          if (page === null) nullCount++;
+          if (++loopCount > 99) break;
+        }
+
+        assert.equal(nullCount, 100);
+        assert.equal(loopCount, 100);
+      } finally {
+        await tryDeleteFile(filepath);
+      }
+    });
   });
 
   suite("nextSync", () => {
