@@ -85,7 +85,7 @@ suite("commonjs", () => {
       );
       fs.writeFileSync(tmpFile, lines.join("\\n"));
 
-      const pager = createPager(tmpFile, { pageSize: 7, delimiter: "\\n" });
+      const pager = createPager(tmpFile, { pageSize: 7, delimiter: "\\n", tryNative: false });
       const collected = [];
 
       const iter = pager[Symbol.asyncIterator]();

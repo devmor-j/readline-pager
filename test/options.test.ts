@@ -44,6 +44,7 @@ suite("options", () => {
         const pager = createPager(filepath, {
           pageSize: 2,
           backward: true,
+          tryNative: false,
         });
 
         const result: string[] = [];
@@ -94,7 +95,10 @@ suite("options", () => {
       const filepath1 = await createTmpFile("");
 
       try {
-        const pager1 = createPager(filepath1, { backward: true });
+        const pager1 = createPager(filepath1, {
+          backward: true,
+          tryNative: false,
+        });
 
         const page = pager1.nextSync();
         assert.deepEqual(page, [""]);
@@ -128,6 +132,7 @@ suite("options", () => {
         const pager = createPager(filepath, {
           backward: true,
           pageSize: 2,
+          tryNative: false,
         });
 
         const lines: string[] = [];
@@ -149,7 +154,11 @@ suite("options", () => {
       const filepath = await createTmpFile(content);
 
       try {
-        const pager = createPager(filepath, { backward: true, pageSize: 2 });
+        const pager = createPager(filepath, {
+          backward: true,
+          pageSize: 2,
+          tryNative: false,
+        });
 
         const out: string[] = [];
 
@@ -198,6 +207,7 @@ suite("options", () => {
           pageSize: 10,
           prefetch: 2,
           chunkSize: 128,
+          tryNative: false,
         });
 
         for (const page of pager) {
@@ -221,6 +231,7 @@ suite("options", () => {
         backward: true,
         pageSize: 1,
         chunkSize: 1,
+        tryNative: false,
       });
 
       await new Promise((r) => setTimeout(r, 5));
@@ -285,6 +296,7 @@ suite("options", () => {
         const pager = createPager(filepath, {
           pageSize: 2,
           delimiter: "\r\n",
+          tryNative: false,
         });
 
         const result: string[] = [];
@@ -315,6 +327,7 @@ suite("options", () => {
           backward: true,
           pageSize: 2,
           chunkSize: 4,
+          tryNative: false,
           // @ts-expect-error deliberate non-string delimiter to trigger error
           delimiter: badDelimiter,
         });
@@ -362,6 +375,7 @@ suite("options", () => {
         const pager = createPager(filepath, {
           pageSize: 3,
           prefetch: 2,
+          tryNative: false,
         });
         const pages: string[][] = [];
 
@@ -396,6 +410,7 @@ suite("options", () => {
         const pager = createPager(filepath, {
           pageSize: 40,
           useWorker: true,
+          tryNative: false,
         });
 
         for await (const _ of pager) {
@@ -418,6 +433,7 @@ suite("options", () => {
         const pager = createPager(filepath, {
           pageSize: 500,
           useWorker: true,
+          tryNative: false,
         });
 
         let total = 0;
@@ -448,6 +464,7 @@ suite("options", () => {
         const pager = createPager(filepath, {
           pageSize: 1_000,
           useWorker: true,
+          tryNative: false,
         });
 
         const first = await pager.next();
@@ -469,8 +486,20 @@ suite("options", () => {
           createPager("x", {
             backward: true,
             useWorker: true,
+            tryNative: false,
           }),
         /backward not supported/,
+      );
+    });
+
+    test("it throws when used with native reading", () => {
+      assert.throws(
+        () =>
+          createPager("x", {
+            useWorker: true,
+            tryNative: true,
+          }),
+        /tryNative not supported/,
       );
     });
 
@@ -481,6 +510,7 @@ suite("options", () => {
       try {
         const pager = createPager(filepath, {
           useWorker: true,
+          tryNative: false,
           pageSize: 5,
         });
 
@@ -502,6 +532,7 @@ suite("options", () => {
       try {
         const pager = createPager(filepath, {
           useWorker: true,
+          tryNative: false,
           pageSize: 10,
         });
 
@@ -520,6 +551,7 @@ suite("options", () => {
       try {
         const pager = createPager(filepath, {
           useWorker: true,
+          tryNative: false,
           pageSize: 10,
           prefetch: 1,
         });
@@ -545,6 +577,7 @@ suite("options", () => {
       try {
         const pager = createPager(filepath, {
           useWorker: true,
+          tryNative: false,
           pageSize: 2,
           prefetch: 3,
         });
@@ -571,6 +604,7 @@ suite("options", () => {
       try {
         const pager = createPager(filepath, {
           useWorker: true,
+          tryNative: false,
           pageSize: 10,
           prefetch: 2,
         });

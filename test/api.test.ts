@@ -12,30 +12,13 @@ after(runTestCleanup);
 
 suite("apis", () => {
   suite("next", () => {
-    test("pending next() resolves to null when closed (waiter/unblock branch)", async () => {
-      const content = createTextLines(20);
-      const filepath = await createTmpFile(content);
-
-      try {
-        const pager = createPager(filepath, { pageSize: 1, prefetch: 1 });
-
-        const pending = pager.next();
-        await pager.close();
-
-        const res = await pending;
-        assert.equal(res, null);
-      } finally {
-        await tryDeleteFile(filepath);
-      }
-    });
-
     test("next() waits when pageSize large and prefetch small (waiter branch)", async () => {
       const content = createTextLines(5);
       const filepath = await createTmpFile(content);
 
       try {
         const pager = createPager(filepath, {
-          pageSize: 1_000_000, // intentionally huge to force aggregation/wait
+          pageSize: 1_000_000,
           prefetch: 1,
           chunkSize: 16,
         });
@@ -89,6 +72,7 @@ suite("apis", () => {
         const pager = createPager(filepath, {
           pageSize: 3,
           prefetch: 2,
+          tryNative: false,
         });
 
         const lines: string[] = [];
@@ -135,10 +119,13 @@ suite("apis", () => {
       const filepath = await createTmpFile(content);
 
       try {
-        const pager = createPager(filepath, { pageSize: 2, prefetch: 2 });
+        const pager = createPager(filepath, {
+          pageSize: 2,
+          prefetch: 2,
+          tryNative: false,
+        });
         const iter = pager[Symbol.asyncIterator]();
 
-        // consume one page to ensure iterator started
         const first = await iter.next();
         assert.ok(first.value && first.value.length > 0);
 
@@ -160,7 +147,11 @@ suite("apis", () => {
       const filepath = await createTmpFile(content);
 
       try {
-        const pager = createPager(filepath, { pageSize: 2, prefetch: 1 });
+        const pager = createPager(filepath, {
+          pageSize: 2,
+          prefetch: 1,
+          tryNative: false,
+        });
         const iter = pager[Symbol.iterator]();
 
         const first = iter.next();

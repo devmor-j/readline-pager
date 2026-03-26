@@ -20,7 +20,7 @@
 - 🔁 Async (`for await...of`) and sync (`for...of`) iteration
 - 📄 Page-based reading with manual control (`next`, `nextSync`)
 - 🔀 Forward and backward reading support
-- 🧪 Fully typed with high test coverage (>90%)
+- 🧪 Fully typed with high test coverage (~95%)
 
 > **Important:**  
 > Performance depends heavily on the `chunkSize` option. Tune it for your storage device. A value of **64 KiB** is usually a good starting point. Increasing it may improve throughput until you reach the best value for your hardware.
@@ -85,6 +85,7 @@ createPager(filepath, {
   prefetch?: number,    // default: 8
   backward?: boolean,   // default: false
   useWorker?: boolean,  // default: false
+  tryNative?: boolean,  // default: true
 });
 ```
 
@@ -94,6 +95,10 @@ createPager(filepath, {
 - `prefetch` — maximum number of pages buffered internally.
 - `backward` — read the file from end to start.
 - `useWorker` — offload reading to a worker thread (forward reading only).
+- `tryNative` — attempts to use the native reader, falls back to the non-native version if it fails.
+
+> **Note:**
+> `createNativePager` supports only `pageSize`, `delimiter`, and `backward` options and does **not** support multi-character delimiters.
 
 ---
 
@@ -107,7 +112,11 @@ Returns `null` when the end of the file is reached.
 
 Empty lines are preserved.
 
----
+> **Note:**
+> Unlike Node.js `readline`, which may skip empty files or leading empty lines, `readline-pager` always returns all lines.
+>
+> - A completely empty file (`0` bytes) produces `[""]` on the first read.
+> - A file containing multiple empty lines returns each line as an empty string.
 
 ### `pager.nextSync(): string[] | null`
 
@@ -115,27 +124,9 @@ Synchronous version of `pager.next()`.
 
 Returns the next page immediately or `null` when the end of the file is reached.
 
----
-
 ### `pager.close(): Promise<void>`
 
 Stops reading and releases resources asynchronously. Safe to call at any time.
-
----
-
-### `createNativePager(filepath, options?): Pager`
-
-Creates a pager backed by the optional native C++ addon.
-
-If the native addon is not available for the current platform, this function throws.
-
----
-
-> **Note:**
-> Unlike Node.js `readline`, which may skip empty files or leading empty lines, `readline-pager` always returns all lines.
->
-> - A completely empty file (`0` bytes) produces `[""]` on the first read.
-> - A file containing multiple empty lines returns each line as an empty string.
 
 ---
 

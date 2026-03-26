@@ -1,23 +1,13 @@
 import { createRequire } from "node:module";
 import { arch, platform } from "node:os";
-import { NativeReaderOptions, Pager } from "./types.js";
+import type {
+  AddonFD,
+  NativeAddon,
+  NativeReaderOptions,
+  Pager,
+} from "./types.js";
 
 const require = createRequire(import.meta.url);
-
-type AddonFD = object | null;
-type AddonData = Buffer | null;
-
-interface NativeAddon {
-  open: (
-    filepath: string,
-    pageSize: number,
-    delimiter: string,
-    backward: boolean,
-  ) => AddonFD;
-  next: (fd: AddonFD) => Promise<AddonData>;
-  nextSync: (fd: AddonFD) => AddonData;
-  close: (fd: AddonFD) => Promise<void>;
-}
 
 function isMusl(): boolean {
   if (platform() !== "linux") return false;
@@ -62,13 +52,21 @@ function loadNativeAddon(): NativeAddon {
 
 export function createNativePager(
   filepath: string,
-  options?: NativeReaderOptions,
+  options?: Partial<NativeReaderOptions>,
 ): Pager {
   const {
     pageSize = 1_000,
     delimiter = "\n",
     backward = false,
   } = options ?? {};
+
+  if (!filepath) throw new Error("filepath required");
+  if (pageSize < 1) throw new RangeError("pageSize must be >= 1");
+  if (delimiter.length !== 1) {
+    throw new RangeError(
+      "native reader only supports single-character delimiters",
+    );
+  }
 
   const nativePager = loadNativeAddon();
 

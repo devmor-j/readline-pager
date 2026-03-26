@@ -22,15 +22,25 @@ export function createPager(
     prefetch = 8,
     backward = false,
     useWorker = false,
-    tryNative = false,
+    tryNative = true,
   } = options;
 
   if (!filepath) throw new Error("filepath required");
   if (pageSize < 1) throw new RangeError("pageSize must be >= 1");
   if (prefetch < 1) throw new RangeError("prefetch must be >= 1");
 
-  if (backward && useWorker)
-    throw new Error("backward not supported with useWorker");
+  if (useWorker) {
+    if (backward) throw new Error("backward not supported with useWorker");
+    if (tryNative) throw new Error("tryNative not supported with useWorker");
+  }
+
+  if (tryNative) {
+    if (delimiter.length !== 1) {
+      throw new RangeError(
+        "native reader only supports single-character delimiters",
+      );
+    }
+  }
 
   const _options: ReaderOptions = {
     chunkSize,

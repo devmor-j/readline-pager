@@ -22,6 +22,7 @@ suite("stress", () => {
         pageSize,
         prefetch: 1,
         chunkSize: 256,
+        tryNative: false,
       });
 
       let pages = 0;
