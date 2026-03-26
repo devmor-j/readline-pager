@@ -1,9 +1,15 @@
+import { createNativePager } from "./native.js";
 import {
   createBackwardReader,
   createForwardReader,
   createWorkerReader,
 } from "./reader/index.reader.js";
-import type { Pager, PagerOptions, ReaderOptions } from "./types.js";
+import type {
+  NativeReaderOptions,
+  Pager,
+  PagerOptions,
+  ReaderOptions,
+} from "./types.js";
 
 export function createPager(
   filepath: string,
@@ -16,6 +22,7 @@ export function createPager(
     prefetch = 8,
     backward = false,
     useWorker = false,
+    tryNative = false,
   } = options;
 
   if (!filepath) throw new Error("filepath required");
@@ -32,11 +39,28 @@ export function createPager(
     delimiter,
   };
 
-  const reader = useWorker
-    ? createWorkerReader(filepath, _options)
-    : backward
-      ? createBackwardReader(filepath, _options)
-      : createForwardReader(filepath, _options);
+  let nativeReader: Pager | undefined;
+
+  if (tryNative) {
+    const _nativeOptions: NativeReaderOptions = {
+      pageSize,
+      delimiter,
+      backward,
+    };
+
+    try {
+      nativeReader = createNativePager(filepath, _nativeOptions);
+    } catch {}
+  }
+
+  const reader =
+    tryNative && nativeReader
+      ? nativeReader
+      : useWorker
+        ? createWorkerReader(filepath, _options)
+        : backward
+          ? createBackwardReader(filepath, _options)
+          : createForwardReader(filepath, _options);
 
   if (process.env.TEST_CLEANUPS) {
     (globalThis as any).__test_cleanups__ ??= [];

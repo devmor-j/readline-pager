@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { arch, platform } from "node:os";
-import { Pager } from "./types.js";
+import { NativeReaderOptions, Pager } from "./types.js";
 
 const require = createRequire(import.meta.url);
 
@@ -8,7 +8,12 @@ type AddonFD = object | null;
 type AddonData = Buffer | null;
 
 interface NativeAddon {
-  open: (filepath: string, pageSize: number, delimiter: string) => AddonFD;
+  open: (
+    filepath: string,
+    pageSize: number,
+    delimiter: string,
+    backward: boolean,
+  ) => AddonFD;
   next: (fd: AddonFD) => Promise<AddonData>;
   nextSync: (fd: AddonFD) => AddonData;
   close: (fd: AddonFD) => Promise<void>;
@@ -57,22 +62,27 @@ function loadNativeAddon(): NativeAddon {
 
 export function createNativePager(
   filepath: string,
-  { pageSize = 1_000, delimiter = "\n" } = {},
+  options?: NativeReaderOptions,
 ): Pager {
-  const pagerNative = loadNativeAddon();
+  const {
+    pageSize = 1_000,
+    delimiter = "\n",
+    backward = false,
+  } = options ?? {};
+
+  const nativePager = loadNativeAddon();
 
   let fd: AddonFD = null;
   let closed = false;
 
   const init = () => {
-    // TODO: process pageSize on native addon (cc)
-    fd = pagerNative.open(filepath, pageSize, delimiter);
+    fd = nativePager.open(filepath, pageSize, delimiter, backward);
   };
 
   const next = async () => {
     if (closed || !fd) return null;
 
-    const data = await pagerNative.next(fd);
+    const data = await nativePager.next(fd);
     if (!data) return null;
 
     return data.toString("utf8").split(delimiter);
@@ -81,7 +91,7 @@ export function createNativePager(
   const nextSync = () => {
     if (closed || !fd) return null;
 
-    const data = pagerNative.nextSync(fd);
+    const data = nativePager.nextSync(fd);
     if (!data) return null;
 
     return data.toString("utf8").split(delimiter);
@@ -90,7 +100,7 @@ export function createNativePager(
   const close = async () => {
     if (!closed || fd) {
       closed = true;
-      await pagerNative.close(fd);
+      await nativePager.close(fd);
       fd = null;
     }
   };

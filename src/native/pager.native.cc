@@ -5,23 +5,31 @@
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <fcntl.h>
-#if defined(__x86_64__) || defined(__i386__)
-#include <immintrin.h>
-#endif
 #include <mutex>
 #include <node_api.h>
 #include <stop_token>
+#include <string>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <thread>
 #include <unistd.h>
+
+#if defined(__x86_64__) || defined(__i386__)
+#include <immintrin.h>
+#endif
 
 #if defined(__aarch64__) || defined(__arm__)
 #include <arm_neon.h>
 #include <asm/hwcap.h>
 #include <sys/auxv.h>
 #endif
+
+static constexpr size_t BLOCK_SIZE = 64 * 1024;
 
 enum class CpuFeature { AVX2, Neon, Unsupported };
 
@@ -38,21 +46,36 @@ static CpuFeature detect_cpu() {
   return CpuFeature::Unsupported;
 }
 
-struct PageBoundary {
+struct Segment {
   size_t start;
-  size_t length;
+  size_t end;
+};
+
+struct PageItem {
+  const char *data = nullptr;
+  size_t length = 0;
+  bool owned = false;
 };
 
 static constexpr size_t QUEUE_CAP = 8192;
+static_assert((QUEUE_CAP & (QUEUE_CAP - 1)) == 0);
+
+struct PagerState;
+static inline bool queue_empty(const PagerState *st);
+static inline bool queue_full(const PagerState *st);
+static inline void queue_clear(PagerState *st);
+static inline bool queue_push_item(PagerState *st, const PageItem &item);
+static inline bool queue_pop_item(PagerState *st, PageItem &out);
 
 struct PagerState {
   int fd = -1;
   size_t filesize = 0;
   const char *data = nullptr;
-  uint32_t page_lines = 1000;
+  size_t page_lines = 1000;
   unsigned char delimiter = '\n';
+  bool backward = false;
 
-  PageBoundary queue[QUEUE_CAP];
+  PageItem queue[QUEUE_CAP];
   std::atomic<size_t> head{0};
   std::atomic<size_t> tail{0};
 
@@ -62,58 +85,278 @@ struct PagerState {
   std::atomic<bool> scan_finished{false};
   std::atomic<bool> aborted{false};
 
+  std::atomic<uint32_t> refs{0};
+  std::atomic<bool> external_finalized{false};
+  std::atomic<bool> destroyed{false};
+
   std::jthread scanner_thread;
 
-  PagerState() = default;
-  ~PagerState() {
-    aborted = true;
+  void retain_ref() { refs.fetch_add(1, std::memory_order_acq_rel); }
+
+  void release_ref() {
+    if (refs.fetch_sub(1, std::memory_order_acq_rel) == 1)
+      maybe_destroy();
+  }
+
+  void request_close() {
+    aborted.store(true, std::memory_order_release);
+    scan_finished.store(true, std::memory_order_release);
+
+    if (scanner_thread.joinable())
+      scanner_thread.request_stop();
+
+    queue_clear(this);
     cv.notify_all();
+  }
+
+  void mark_external_finalized() {
+    external_finalized.store(true, std::memory_order_release);
+    maybe_destroy();
+  }
+
+  void maybe_destroy() {
+    if (!external_finalized.load(std::memory_order_acquire))
+      return;
+    if (refs.load(std::memory_order_acquire) != 0)
+      return;
+
+    bool expected = false;
+    if (destroyed.compare_exchange_strong(expected, true,
+                                          std::memory_order_acq_rel)) {
+      delete this;
+    }
+  }
+
+  ~PagerState() {
+    aborted.store(true, std::memory_order_release);
+    scan_finished.store(true, std::memory_order_release);
+    cv.notify_all();
+
     if (scanner_thread.joinable())
       scanner_thread.join();
+
     if (data && filesize > 0)
       munmap(const_cast<char *>(data), filesize);
-    if (fd >= 0)
-      close(fd);
   }
 };
 
-static void buffer_finalize(napi_env env, void *data, void *hint) {
-  (void)env;
-  (void)data;
-  (void)hint;
+static inline bool queue_empty(const PagerState *st) {
+  return st->tail.load(std::memory_order_acquire) ==
+         st->head.load(std::memory_order_acquire);
 }
 
-static inline bool queue_push(PagerState *st, size_t start, size_t len) {
-  while (!st->aborted.load(std::memory_order_relaxed)) {
-    size_t head = st->head.load(std::memory_order_acquire);
-    size_t next = (head + 1) & (QUEUE_CAP - 1);
+static inline bool queue_full(const PagerState *st) {
+  const size_t head = st->head.load(std::memory_order_acquire);
+  const size_t next = (head + 1) & (QUEUE_CAP - 1);
+  return next == st->tail.load(std::memory_order_acquire);
+}
+
+static inline void queue_clear(PagerState *st) {
+  PageItem item;
+  while (queue_pop_item(st, item)) {
+    if (item.owned && item.data)
+      free(const_cast<char *>(item.data));
+  }
+}
+
+static inline bool queue_push_item(PagerState *st, const PageItem &item) {
+  while (!st->aborted.load(std::memory_order_acquire)) {
+    const size_t head = st->head.load(std::memory_order_acquire);
+    const size_t next = (head + 1) & (QUEUE_CAP - 1);
+
     if (next != st->tail.load(std::memory_order_acquire)) {
-      st->queue[head] = {start, len};
+      if (st->aborted.load(std::memory_order_acquire))
+        return false;
+
+      st->queue[head] = item;
       st->head.store(next, std::memory_order_release);
       st->cv.notify_one();
       return true;
     }
+
     std::unique_lock lk(st->mtx);
-    st->cv.wait(lk);
+    st->cv.wait(lk, [&] {
+      return st->aborted.load(std::memory_order_acquire) || !queue_full(st);
+    });
   }
+
   return false;
 }
 
-static inline bool queue_pop(PagerState *st, PageBoundary &out) {
-  size_t tail = st->tail.load(std::memory_order_acquire);
+static inline bool queue_pop_item(PagerState *st, PageItem &out) {
+  const size_t tail = st->tail.load(std::memory_order_acquire);
   if (tail == st->head.load(std::memory_order_acquire))
     return false;
+
   out = st->queue[tail];
   st->tail.store((tail + 1) & (QUEUE_CAP - 1), std::memory_order_release);
   st->cv.notify_one();
   return true;
 }
 
+static void slice_buffer_finalize(napi_env env, void *data, void *hint) {
+  (void)env;
+  (void)data;
+  auto *st = static_cast<PagerState *>(hint);
+  if (st)
+    st->release_ref();
+}
+
+static void owned_buffer_finalize(napi_env env, void *data, void *hint) {
+  (void)env;
+  (void)hint;
+  (void)data;
+  free(data);
+}
+
+static void pager_external_finalize(napi_env env, void *data, void *hint) {
+  (void)env;
+  (void)hint;
+  auto *st = static_cast<PagerState *>(data);
+  if (!st)
+    return;
+
+  st->request_close();
+  st->mark_external_finalized();
+}
+
+static inline bool create_page_value(napi_env env, PagerState *st,
+                                     const PageItem &item, napi_value *out) {
+  if (item.length == 0)
+    return napi_create_buffer_copy(env, 0, nullptr, nullptr, out) == napi_ok;
+
+  if (item.owned) {
+    napi_status s = napi_create_external_buffer(
+        env, item.length, const_cast<char *>(item.data), owned_buffer_finalize,
+        nullptr, out);
+
+    if (s != napi_ok) {
+      free(const_cast<char *>(item.data));
+      return false;
+    }
+
+    return true;
+  }
+
+  st->retain_ref();
+
+  napi_status s = napi_create_external_buffer(env, item.length,
+                                              const_cast<char *>(item.data),
+                                              slice_buffer_finalize, st, out);
+
+  if (s != napi_ok) {
+    st->release_ref();
+    return false;
+  }
+
+  return true;
+}
+
+static inline bool forward_consume_delim(PagerState *st, size_t pos,
+                                         size_t &page_start, uint32_t &lines) {
+  if (++lines >= st->page_lines) {
+    if (pos >= page_start) {
+      PageItem item{st->data + page_start, pos - page_start, false};
+      if (!queue_push_item(st, item))
+        return false;
+    }
+    page_start = pos + 1;
+    lines = 0;
+  }
+  return true;
+}
+
+static inline void forward_finish(PagerState *st, size_t page_start,
+                                  size_t size) {
+  if (page_start < size) {
+    PageItem item{st->data + page_start, size - page_start, false};
+    queue_push_item(st, item);
+    return;
+  }
+
+  if (size > 0 && st->data[size - 1] == static_cast<char>(st->delimiter)) {
+    PageItem item{nullptr, 0, false};
+    queue_push_item(st, item);
+  }
+}
+
+static inline bool build_backward_page_item(PagerState *st,
+                                            const Segment *segments,
+                                            size_t count, PageItem &out) {
+  size_t total = 0;
+  for (size_t i = 0; i < count; ++i) {
+    total += segments[i].end - segments[i].start;
+    if (i + 1 < count)
+      ++total;
+  }
+
+  if (total == 0) {
+    out = {nullptr, 0, false};
+    return true;
+  }
+
+  char *buf = static_cast<char *>(malloc(total));
+  if (!buf) {
+    st->aborted.store(true, std::memory_order_release);
+    st->scan_finished.store(true, std::memory_order_release);
+    st->cv.notify_all();
+    return false;
+  }
+
+  char *dst = buf;
+  for (size_t i = 0; i < count; ++i) {
+    const size_t len = segments[i].end - segments[i].start;
+    if (len > 0) {
+      std::memcpy(dst, st->data + segments[i].start, len);
+      dst += len;
+    }
+
+    if (i + 1 < count)
+      *dst++ = static_cast<char>(st->delimiter);
+  }
+
+  out = {buf, total, true};
+  return true;
+}
+
+static inline bool flush_backward_page(PagerState *st, const Segment *segments,
+                                       size_t count) {
+  if (count == 0)
+    return true;
+
+  PageItem item;
+  if (!build_backward_page_item(st, segments, count, item))
+    return false;
+
+  if (!queue_push_item(st, item)) {
+    if (item.owned && item.data)
+      free(const_cast<char *>(item.data));
+    return false;
+  }
+
+  return true;
+}
+
+static inline bool backward_consume_delim(PagerState *st, Segment *segments,
+                                          size_t &segment_count,
+                                          size_t &segment_end,
+                                          size_t delim_pos) {
+  segments[segment_count++] = Segment{delim_pos + 1, segment_end};
+  segment_end = delim_pos;
+
+  if (segment_count >= st->page_lines) {
+    if (!flush_backward_page(st, segments, segment_count))
+      return false;
+    segment_count = 0;
+  }
+
+  return true;
+}
+
 #if defined(__x86_64__) || defined(__i386__)
 __attribute__((target("avx2")))
 #endif
-static void scan_avx2(std::stop_token stop, PagerState *st) {
-  size_t i = 0;
+static void scan_forward_avx2(std::stop_token stop, PagerState *st) {
   const size_t size = st->filesize;
   const char *data = st->data;
   const __m256i needle = _mm256_set1_epi8(static_cast<char>(st->delimiter));
@@ -121,139 +364,312 @@ static void scan_avx2(std::stop_token stop, PagerState *st) {
   size_t page_start = 0;
   uint32_t lines = 0;
 
-  while (i + 32 <= size && !stop.stop_requested()) {
-    __m256i chunk =
-        _mm256_loadu_si256(reinterpret_cast<const __m256i *>(data + i));
-    uint32_t mask = static_cast<uint32_t>(
-        _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, needle)));
+  size_t block_begin = 0;
+  while (block_begin < size && !stop.stop_requested() &&
+         !st->aborted.load(std::memory_order_acquire)) {
+    const size_t block_end = std::min(size, block_begin + BLOCK_SIZE);
+    size_t i = block_begin;
 
-    while (mask) {
-      int offset = __builtin_ctz(mask);
-      size_t pos = i + offset;
+    for (; i + 32 <= block_end && !stop.stop_requested() &&
+           !st->aborted.load(std::memory_order_acquire);
+         i += 32) {
+      const __m256i chunk =
+          _mm256_loadu_si256(reinterpret_cast<const __m256i *>(data + i));
+      uint32_t mask = static_cast<uint32_t>(
+          _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, needle)));
 
-      if (++lines >= st->page_lines) {
-        if (!queue_push(st, page_start, pos - page_start))
+      while (mask) {
+        const uint32_t bit = static_cast<uint32_t>(__builtin_ctz(mask));
+        const size_t pos = i + bit;
+        if (!forward_consume_delim(st, pos, page_start, lines))
           return;
-        page_start = pos + 1;
-        lines = 0;
-      }
-
-      mask &= mask - 1;
-    }
-
-    i += 32;
-  }
-
-  for (; i < size && !stop.stop_requested(); ++i) {
-    if (data[i] == st->delimiter) {
-      if (++lines >= st->page_lines) {
-        if (!queue_push(st, page_start, i - page_start))
-          return;
-        page_start = i + 1;
-        lines = 0;
+        mask &= mask - 1;
       }
     }
+
+    for (; i < block_end && !stop.stop_requested() &&
+           !st->aborted.load(std::memory_order_acquire);
+         ++i) {
+      if (data[i] == static_cast<char>(st->delimiter)) {
+        if (!forward_consume_delim(st, i, page_start, lines))
+          return;
+      }
+    }
+
+    block_begin = block_end;
   }
 
-  if (page_start < size)
-    queue_push(st, page_start, size - page_start);
+  if (!st->aborted.load(std::memory_order_acquire))
+    forward_finish(st, page_start, size);
 }
 
-static void scan_neon(std::stop_token stop, PagerState *st) {
+static void scan_forward_neon(std::stop_token stop, PagerState *st) {
 #if defined(__aarch64__) || defined(__arm__)
-  size_t i = 0;
   const size_t size = st->filesize;
-  const char *data = st->data;
+  const uint8_t *data = reinterpret_cast<const uint8_t *>(st->data);
   const uint8x16_t needle = vdupq_n_u8(st->delimiter);
 
   size_t page_start = 0;
   uint32_t lines = 0;
 
-  while (i + 16 <= size && !stop.stop_requested()) {
-    uint8x16_t chunk = vld1q_u8(reinterpret_cast<const uint8_t *>(data + i));
-    uint8x16_t cmp = vceqq_u8(chunk, needle);
+  size_t block_begin = 0;
+  while (block_begin < size && !stop.stop_requested() &&
+         !st->aborted.load(std::memory_order_acquire)) {
+    const size_t block_end = std::min(size, block_begin + BLOCK_SIZE);
+    size_t i = block_begin;
 
-    uint64x2_t res = vreinterpretq_u64_u8(cmp);
+    for (; i + 16 <= block_end && !stop.stop_requested() &&
+           !st->aborted.load(std::memory_order_acquire);
+         i += 16) {
+      const uint8x16_t chunk = vld1q_u8(data + i);
+      const uint8x16_t cmp = vceqq_u8(chunk, needle);
+      const uint64x2_t lanes = vreinterpretq_u64_u8(cmp);
 
-    if (vgetq_lane_u64(res, 0) || vgetq_lane_u64(res, 1)) {
-      for (int b = 0; b < 16; ++b) {
-        if (data[i + b] == st->delimiter) {
-          if (++lines >= st->page_lines) {
-            if (!queue_push(st, page_start, i + b - page_start))
+      if (vgetq_lane_u64(lanes, 0) || vgetq_lane_u64(lanes, 1)) {
+        for (int b = 0; b < 16; ++b) {
+          if (data[i + static_cast<size_t>(b)] == st->delimiter) {
+            if (!forward_consume_delim(st, i + static_cast<size_t>(b),
+                                       page_start, lines))
               return;
-            page_start = i + b + 1;
-            lines = 0;
           }
         }
       }
     }
 
-    i += 16;
-  }
-
-  for (; i < size && !stop.stop_requested(); ++i) {
-    if (data[i] == st->delimiter) {
-      if (++lines >= st->page_lines) {
-        if (!queue_push(st, page_start, i - page_start))
+    for (; i < block_end && !stop.stop_requested() &&
+           !st->aborted.load(std::memory_order_acquire);
+         ++i) {
+      if (data[i] == static_cast<char>(st->delimiter)) {
+        if (!forward_consume_delim(st, i, page_start, lines))
           return;
-        page_start = i + 1;
-        lines = 0;
       }
     }
+
+    block_begin = block_end;
   }
 
-  if (page_start < size)
-    queue_push(st, page_start, size - page_start);
+  if (!st->aborted.load(std::memory_order_acquire))
+    forward_finish(st, page_start, size);
 #endif
 }
 
-static void background_scanner(std::stop_token stop, PagerState *st) {
-  CpuFeature feature = detect_cpu();
+#if defined(__x86_64__) || defined(__i386__)
+__attribute__((target("avx2")))
+#endif
+static void scan_backward_avx2(std::stop_token stop, PagerState *st) {
+  const size_t size = st->filesize;
+  const char *data = st->data;
+  const __m256i needle = _mm256_set1_epi8(static_cast<char>(st->delimiter));
 
-  if (feature == CpuFeature::AVX2) {
-    scan_avx2(stop, st);
-  } else if (feature == CpuFeature::Neon) {
-    scan_neon(stop, st);
-  } else {
-    st->scan_finished = true;
+  const size_t cap = std::max<size_t>(st->page_lines, 1);
+  Segment *segments = static_cast<Segment *>(malloc(sizeof(Segment) * cap));
+  if (!segments) {
+    st->aborted.store(true, std::memory_order_release);
+    st->scan_finished.store(true, std::memory_order_release);
     st->cv.notify_all();
     return;
   }
 
-  st->scan_finished = true;
+  size_t segment_count = 0;
+  size_t segment_end = size;
+  size_t block_end = size;
+
+  while (block_end > 0 && !stop.stop_requested() &&
+         !st->aborted.load(std::memory_order_acquire)) {
+    const size_t block_start =
+        (block_end > BLOCK_SIZE) ? (block_end - BLOCK_SIZE) : 0;
+
+    size_t i = block_end;
+
+    while (i - block_start >= 32 && !stop.stop_requested() &&
+           !st->aborted.load(std::memory_order_acquire)) {
+      i -= 32;
+
+      const __m256i chunk =
+          _mm256_loadu_si256(reinterpret_cast<const __m256i *>(data + i));
+
+      uint32_t mask = static_cast<uint32_t>(
+          _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, needle)));
+
+      while (mask) {
+        const uint32_t bit = 31u - static_cast<uint32_t>(__builtin_clz(mask));
+        const size_t pos = i + bit;
+
+        if (!backward_consume_delim(st, segments, segment_count, segment_end,
+                                    pos))
+          goto done;
+
+        mask &= ~(1u << bit);
+      }
+    }
+
+    while (i > block_start && !stop.stop_requested() &&
+           !st->aborted.load(std::memory_order_acquire)) {
+      --i;
+      if (data[i] == static_cast<char>(st->delimiter)) {
+        if (!backward_consume_delim(st, segments, segment_count, segment_end,
+                                    i))
+          goto done;
+      }
+    }
+
+    block_end = block_start;
+  }
+
+  if (!st->aborted.load(std::memory_order_acquire)) {
+    segments[segment_count++] = Segment{0, segment_end};
+
+    if (segment_count >= st->page_lines) {
+      if (!flush_backward_page(st, segments, segment_count))
+        goto done;
+      segment_count = 0;
+    }
+
+    if (segment_count > 0)
+      flush_backward_page(st, segments, segment_count);
+  }
+
+done:
+  free(segments);
+}
+
+static void scan_backward_neon(std::stop_token stop, PagerState *st) {
+#if defined(__aarch64__) || defined(__arm__)
+  const size_t size = st->filesize;
+  const uint8_t *data = reinterpret_cast<const uint8_t *>(st->data);
+  const uint8x16_t needle = vdupq_n_u8(st->delimiter);
+
+  const size_t cap = std::max<size_t>(st->page_lines, 1);
+  Segment *segments = static_cast<Segment *>(malloc(sizeof(Segment) * cap));
+  if (!segments) {
+    st->aborted.store(true, std::memory_order_release);
+    st->scan_finished.store(true, std::memory_order_release);
+    st->cv.notify_all();
+    return;
+  }
+
+  size_t segment_count = 0;
+  size_t segment_end = size;
+  size_t block_end = size;
+
+  while (block_end > 0 && !stop.stop_requested() &&
+         !st->aborted.load(std::memory_order_acquire)) {
+    const size_t block_start =
+        (block_end > BLOCK_SIZE) ? (block_end - BLOCK_SIZE) : 0;
+
+    size_t i = block_end;
+
+    while (i - block_start >= 16 && !stop.stop_requested() &&
+           !st->aborted.load(std::memory_order_acquire)) {
+      i -= 16;
+
+      const uint8x16_t chunk = vld1q_u8(data + i);
+      const uint8x16_t cmp = vceqq_u8(chunk, needle);
+      const uint64x2_t lanes = vreinterpretq_u64_u8(cmp);
+
+      if (vgetq_lane_u64(lanes, 0) || vgetq_lane_u64(lanes, 1)) {
+        for (int b = 15; b >= 0; --b) {
+          if (data[i + static_cast<size_t>(b)] == st->delimiter) {
+            if (!backward_consume_delim(st, segments, segment_count,
+                                        segment_end,
+                                        i + static_cast<size_t>(b)))
+              goto done;
+          }
+        }
+      }
+    }
+
+    while (i > block_start && !stop.stop_requested() &&
+           !st->aborted.load(std::memory_order_acquire)) {
+      --i;
+      if (data[i] == static_cast<char>(st->delimiter)) {
+        if (!backward_consume_delim(st, segments, segment_count, segment_end,
+                                    i))
+          goto done;
+      }
+    }
+
+    block_end = block_start;
+  }
+
+  if (!st->aborted.load(std::memory_order_acquire)) {
+    segments[segment_count++] = Segment{0, segment_end};
+
+    if (segment_count >= st->page_lines) {
+      if (!flush_backward_page(st, segments, segment_count))
+        goto done;
+      segment_count = 0;
+    }
+
+    if (segment_count > 0)
+      flush_backward_page(st, segments, segment_count);
+  }
+
+done:
+  free(segments);
+#endif
+}
+
+static void background_scanner(std::stop_token stop, PagerState *st) {
+  const CpuFeature feature = detect_cpu();
+
+  if (st->filesize == 0) {
+    if (!st->aborted.load(std::memory_order_acquire)) {
+      PageItem item{nullptr, 0, false};
+      queue_push_item(st, item);
+    }
+    st->scan_finished.store(true, std::memory_order_release);
+    st->cv.notify_all();
+    return;
+  }
+
+  if (feature == CpuFeature::AVX2) {
+    if (st->backward)
+      scan_backward_avx2(stop, st);
+    else
+      scan_forward_avx2(stop, st);
+  } else if (feature == CpuFeature::Neon) {
+    if (st->backward)
+      scan_backward_neon(stop, st);
+    else
+      scan_forward_neon(stop, st);
+  } else {
+    st->scan_finished.store(true, std::memory_order_release);
+    st->cv.notify_all();
+    return;
+  }
+
+  st->scan_finished.store(true, std::memory_order_release);
   st->cv.notify_all();
 }
 
 static napi_value Open(napi_env env, napi_callback_info info) {
-  CpuFeature feature = detect_cpu();
-  if (feature == CpuFeature::Unsupported) {
-    napi_throw_error(env, nullptr,
-                     "Unsupported CPU: requires AVX2 or ARM NEON");
-    return nullptr;
-  }
-
-  size_t argc = 3;
-  napi_value argv[3], external;
+  size_t argc = 5;
+  napi_value argv[5];
   napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
 
   char path[4096];
-  size_t path_len;
+  size_t path_len = 0;
   napi_get_value_string_utf8(env, argv[0], path, sizeof(path), &path_len);
 
-  uint32_t pl = 1000;
+  uint32_t page_lines = 1000;
   if (argc >= 2)
-    napi_get_value_uint32(env, argv[1], &pl);
+    napi_get_value_uint32(env, argv[1], &page_lines);
 
   unsigned char delim = '\n';
   if (argc >= 3) {
-    char dstr[4];
-    size_t dlen;
-    napi_get_value_string_utf8(env, argv[2], dstr, 4, &dlen);
+    char dstr[8];
+    size_t dlen = 0;
+    napi_get_value_string_utf8(env, argv[2], dstr, sizeof(dstr), &dlen);
     if (dlen > 0)
-      delim = dstr[0];
+      delim = static_cast<unsigned char>(dstr[0]);
   }
 
-  int fd = open(path, O_RDONLY);
+  bool backward = false;
+  if (argc >= 4)
+    napi_get_value_bool(env, argv[3], &backward);
+
+  int fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0) {
     napi_throw_error(
         env, nullptr,
@@ -261,28 +677,42 @@ static napi_value Open(napi_env env, napi_callback_info info) {
     return nullptr;
   }
 
-  struct stat stbuf;
-  fstat(fd, &stbuf);
+  struct stat stbuf{};
+  if (fstat(fd, &stbuf) != 0) {
+    close(fd);
+    napi_throw_error(env, nullptr, "Failed to stat file");
+    return nullptr;
+  }
 
-  size_t fs = stbuf.st_size;
+  size_t fs = static_cast<size_t>(stbuf.st_size);
+  void *map = nullptr;
 
-  void *map = mmap(nullptr, fs, PROT_READ, MAP_PRIVATE, fd, 0);
-  madvise(map, fs, MADV_SEQUENTIAL | MADV_WILLNEED);
+  if (fs > 0) {
+    map = mmap(nullptr, fs, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (map == MAP_FAILED) {
+      close(fd);
+      napi_throw_error(env, nullptr, "Failed to map file");
+      return nullptr;
+    }
+
+#if defined(MADV_RANDOM) && defined(MADV_SEQUENTIAL)
+    (void)madvise(map, fs, backward ? MADV_RANDOM : MADV_SEQUENTIAL);
+#endif
+  }
+
+  close(fd);
 
   PagerState *ps = new PagerState();
-
-  ps->fd = fd;
   ps->filesize = fs;
-  ps->data = (const char *)map;
-  ps->page_lines = pl;
+  ps->data = static_cast<const char *>(map);
+  ps->page_lines = static_cast<size_t>(page_lines);
   ps->delimiter = delim;
+  ps->backward = backward;
 
   ps->scanner_thread = std::jthread(background_scanner, ps);
 
-  napi_create_external(
-      env, ps, [](napi_env e, void *d, void *h) { delete (PagerState *)d; },
-      nullptr, &external);
-
+  napi_value external;
+  napi_create_external(env, ps, pager_external_finalize, nullptr, &external);
   return external;
 }
 
@@ -291,25 +721,46 @@ static napi_value NextSync(napi_env env, napi_callback_info info) {
   napi_value argv[1];
   napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
 
-  PagerState *ps;
-  napi_get_value_external(env, argv[0], (void **)&ps);
+  if (argc < 1) {
+    napi_value n;
+    napi_get_null(env, &n);
+    return n;
+  }
 
-  PageBoundary b;
+  PagerState *ps = nullptr;
+  if (napi_get_value_external(env, argv[0], reinterpret_cast<void **>(&ps)) !=
+          napi_ok ||
+      !ps) {
+    napi_value n;
+    napi_get_null(env, &n);
+    return n;
+  }
 
-  while (!queue_pop(ps, b)) {
-    if (ps->scan_finished) {
+  PageItem item;
+
+  while (!queue_pop_item(ps, item)) {
+    if (ps->aborted.load(std::memory_order_acquire) ||
+        ps->scan_finished.load(std::memory_order_acquire)) {
       napi_value n;
       napi_get_null(env, &n);
       return n;
     }
+
     std::unique_lock lk(ps->mtx);
-    ps->cv.wait(lk);
+    ps->cv.wait(lk, [&] {
+      return ps->aborted.load(std::memory_order_acquire) ||
+             ps->scan_finished.load(std::memory_order_acquire) ||
+             !queue_empty(ps);
+    });
   }
 
   napi_value buf;
-
-  napi_create_external_buffer(env, b.length, (void *)(ps->data + b.start),
-                              buffer_finalize, ps, &buf);
+  if (!create_page_value(env, ps, item, &buf)) {
+    if (item.owned && item.data)
+      free(const_cast<char *>(item.data));
+    napi_throw_error(env, nullptr, "Failed to create buffer");
+    return nullptr;
+  }
 
   return buf;
 }
@@ -317,82 +768,129 @@ static napi_value NextSync(napi_env env, napi_callback_info info) {
 struct AsyncWaitData {
   PagerState *ps;
   napi_deferred deferred;
-  PageBoundary result;
+  PageItem result;
   bool found = false;
+  napi_async_work work = nullptr;
 };
+
+static napi_value reject_with_error(napi_env env, napi_deferred deferred,
+                                    const char *msg) {
+  napi_value s, e;
+  napi_create_string_utf8(env, msg, NAPI_AUTO_LENGTH, &s);
+  napi_create_error(env, nullptr, s, &e);
+  napi_reject_deferred(env, deferred, e);
+  napi_value n;
+  napi_get_null(env, &n);
+  return n;
+}
 
 static napi_value Next(napi_env env, napi_callback_info info) {
   size_t argc = 1;
   napi_value argv[1], promise;
   napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
 
-  PagerState *ps;
-  napi_get_value_external(env, argv[0], (void **)&ps);
+  if (argc < 1) {
+    napi_value n;
+    napi_get_null(env, &n);
+    return n;
+  }
+
+  PagerState *ps = nullptr;
+  if (napi_get_value_external(env, argv[0], reinterpret_cast<void **>(&ps)) !=
+          napi_ok ||
+      !ps) {
+    napi_deferred deferred;
+    napi_create_promise(env, &deferred, &promise);
+    return reject_with_error(env, deferred, "Invalid pager handle");
+  }
 
   napi_deferred deferred;
   napi_create_promise(env, &deferred, &promise);
 
-  PageBoundary b;
-
-  if (queue_pop(ps, b)) {
+  PageItem item;
+  if (queue_pop_item(ps, item)) {
     napi_value buf;
-
-    napi_create_external_buffer(env, b.length, (void *)(ps->data + b.start),
-                                buffer_finalize, ps, &buf);
+    if (!create_page_value(env, ps, item, &buf)) {
+      if (item.owned && item.data)
+        free(const_cast<char *>(item.data));
+      return reject_with_error(env, deferred, "Failed to create buffer");
+    }
 
     napi_resolve_deferred(env, deferred, buf);
-  } else if (ps->scan_finished) {
+    return promise;
+  }
+
+  if (ps->aborted.load(std::memory_order_acquire) ||
+      ps->scan_finished.load(std::memory_order_acquire)) {
     napi_value n;
     napi_get_null(env, &n);
     napi_resolve_deferred(env, deferred, n);
-  } else {
-    AsyncWaitData *data = new AsyncWaitData{ps, deferred, {0, 0}, false};
+    return promise;
+  }
 
-    napi_value name;
-    napi_create_string_utf8(env, "WaitPage", NAPI_AUTO_LENGTH, &name);
+  auto *data =
+      new AsyncWaitData{ps, deferred, {nullptr, 0, false}, false, nullptr};
+  ps->retain_ref();
 
-    napi_async_work work;
+  napi_value name;
+  napi_create_string_utf8(env, "WaitPage", NAPI_AUTO_LENGTH, &name);
 
-    napi_create_async_work(
-        env, nullptr, name,
+  napi_status s = napi_create_async_work(
+      env, nullptr, name,
+      [](napi_env, void *d) {
+        auto *wd = static_cast<AsyncWaitData *>(d);
 
-        [](napi_env e, void *d) {
-          AsyncWaitData *wd = (AsyncWaitData *)d;
-
-          while (!wd->ps->aborted) {
-            if (queue_pop(wd->ps, wd->result)) {
-              wd->found = true;
-              return;
-            }
-            if (wd->ps->scan_finished)
-              return;
-
-            std::unique_lock lk(wd->ps->mtx);
-            wd->ps->cv.wait(lk);
+        while (!wd->ps->aborted.load(std::memory_order_acquire)) {
+          if (queue_pop_item(wd->ps, wd->result)) {
+            wd->found = true;
+            return;
           }
-        },
 
-        [](napi_env e, napi_status s, void *d) {
-          AsyncWaitData *wd = (AsyncWaitData *)d;
+          if (wd->ps->scan_finished.load(std::memory_order_acquire))
+            return;
 
-          napi_value res;
+          std::unique_lock lk(wd->ps->mtx);
+          wd->ps->cv.wait(lk, [&] {
+            return wd->ps->aborted.load(std::memory_order_acquire) ||
+                   wd->ps->scan_finished.load(std::memory_order_acquire) ||
+                   !queue_empty(wd->ps);
+          });
+        }
+      },
+      [](napi_env env, napi_status, void *d) {
+        auto *wd = static_cast<AsyncWaitData *>(d);
 
-          if (wd->found) {
-            napi_create_external_buffer(
-                e, wd->result.length, (void *)(wd->ps->data + wd->result.start),
-                buffer_finalize, wd->ps, &res);
+        napi_value res;
+        if (wd->found) {
+          if (!create_page_value(env, wd->ps, wd->result, &res)) {
+            if (wd->result.owned && wd->result.data)
+              free(const_cast<char *>(wd->result.data));
+            reject_with_error(env, wd->deferred, "Failed to create buffer");
           } else {
-            napi_get_null(e, &res);
+            napi_resolve_deferred(env, wd->deferred, res);
           }
+        } else {
+          napi_get_null(env, &res);
+          napi_resolve_deferred(env, wd->deferred, res);
+        }
 
-          napi_resolve_deferred(e, wd->deferred, res);
+        napi_delete_async_work(env, wd->work);
+        wd->ps->release_ref();
+        delete wd;
+      },
+      data, &data->work);
 
-          delete wd;
-        },
+  if (s != napi_ok) {
+    ps->release_ref();
+    delete data;
+    return reject_with_error(env, deferred, "Failed to create async work");
+  }
 
-        data, &work);
-
-    napi_queue_async_work(env, work);
+  if (napi_queue_async_work(env, data->work) != napi_ok) {
+    napi_delete_async_work(env, data->work);
+    ps->release_ref();
+    delete data;
+    return reject_with_error(env, deferred, "Failed to queue async work");
   }
 
   return promise;
@@ -403,20 +901,20 @@ static napi_value Close(napi_env env, napi_callback_info info) {
   napi_value argv[1];
   napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
 
-  PagerState *ps;
-  napi_get_value_external(env, argv[0], (void **)&ps);
-
-  if (ps) {
-    ps->aborted = true;
-    ps->cv.notify_all();
+  if (argc >= 1) {
+    PagerState *ps = nullptr;
+    if (napi_get_value_external(env, argv[0], reinterpret_cast<void **>(&ps)) ==
+            napi_ok &&
+        ps) {
+      ps->request_close();
+    }
   }
 
-  napi_value promise;
+  napi_value promise, resolved;
   napi_deferred deferred;
   napi_create_promise(env, &deferred, &promise);
-
-  napi_resolve_deferred(env, deferred, nullptr);
-
+  napi_get_undefined(env, &resolved);
+  napi_resolve_deferred(env, deferred, resolved);
   return promise;
 }
 
@@ -430,7 +928,6 @@ static napi_value Init(napi_env env, napi_value exports) {
        nullptr}};
 
   napi_define_properties(env, exports, 4, desc);
-
   return exports;
 }
 

@@ -20,7 +20,7 @@
 - 🔁 Async (`for await...of`) and sync (`for...of`) iteration
 - 📄 Page-based reading with manual control (`next`, `nextSync`)
 - 🔀 Forward and backward reading support
-- 🧪 Fully typed with high test coverage (~95%)
+- 🧪 Fully typed with high test coverage (>90%)
 
 > **Important:**  
 > Performance depends heavily on the `chunkSize` option. Tune it for your storage device. A value of **64 KiB** is usually a good starting point. Increasing it may improve throughput until you reach the best value for your hardware.

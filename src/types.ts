@@ -5,9 +5,16 @@ export interface ReaderOptions {
   prefetch: number;
 }
 
+export interface NativeReaderOptions {
+  pageSize: number;
+  delimiter: string;
+  backward: boolean;
+}
+
 export interface PagerOptions extends Partial<ReaderOptions> {
   backward?: boolean;
   useWorker?: boolean;
+  tryNative?: boolean;
 }
 
 export interface Pager extends AsyncIterable<string[]>, Iterable<string[]> {
