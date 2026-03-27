@@ -40,6 +40,73 @@ export function createTextLines(count: number) {
   return lines.join("\n");
 }
 
+export async function createBigTmpFile(
+  filename: string,
+  lines: number,
+  autoDelete = true,
+) {
+  const MAX_WRITABLE_LINES = 1e6;
+
+  let remainingLines = lines;
+  let isFirstWrite = true;
+  let filepath = "";
+
+  if (autoDelete) {
+    const cleanupSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
+    cleanupSignals.forEach((signal) => {
+      process.on(signal, async () => {
+        await tryDeleteFile(filepath);
+        process.exit(0);
+      });
+    });
+  }
+
+  while (remainingLines > 0) {
+    const chunkSize = Math.min(remainingLines, MAX_WRITABLE_LINES);
+    remainingLines -= chunkSize;
+
+    const content = createTextLines(chunkSize);
+
+    if (isFirstWrite) {
+      filepath = await createTmpFile(content, { filename });
+      isFirstWrite = false;
+    } else {
+      await createTmpFile(content, { filename, append: true });
+    }
+
+    process.stdout.write(
+      `⏳ Remaining lines to write: ${remainingLines.toLocaleString()}\r`,
+    );
+  }
+
+  process.stdout.write("\r\x1b[2K");
+
+  const { size: filebytes } = await stat(filepath);
+
+  return { filebytes, filepath };
+}
+
+export async function runTestCleanup() {
+  const cleanups: Function[] = (globalThis as any).__test_cleanups__;
+
+  if (cleanups?.length) {
+    let failedCount = 0;
+
+    for (const cleanup of cleanups) {
+      try {
+        await cleanup();
+      } catch (err) {
+        failedCount++;
+        console.error(err);
+      }
+    }
+
+    if (failedCount > 0) {
+      console.log(`[41mFailed cleanups: ${failedCount}[0m`);
+    }
+  }
+}
+
 export interface BenchmarkArgs {
   lines?: number;
   "chunk-size"?: number;
@@ -111,52 +178,6 @@ export function parseProcessArgv(): BenchmarkArgs {
   return args;
 }
 
-export async function createBigTmpFile(
-  filename: string,
-  lines: number,
-  autoDelete = true,
-) {
-  const MAX_WRITABLE_LINES = 1e6;
-
-  let remainingLines = lines;
-  let isFirstWrite = true;
-  let filepath = "";
-
-  if (autoDelete) {
-    const cleanupSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
-    cleanupSignals.forEach((signal) => {
-      process.on(signal, async () => {
-        await tryDeleteFile(filepath);
-        process.exit(0);
-      });
-    });
-  }
-
-  while (remainingLines > 0) {
-    const chunkSize = Math.min(remainingLines, MAX_WRITABLE_LINES);
-    remainingLines -= chunkSize;
-
-    const content = createTextLines(chunkSize);
-
-    if (isFirstWrite) {
-      filepath = await createTmpFile(content, { filename });
-      isFirstWrite = false;
-    } else {
-      await createTmpFile(content, { filename, append: true });
-    }
-
-    process.stdout.write(
-      `⏳ Remaining lines to write: ${remainingLines.toLocaleString()}\r`,
-    );
-  }
-
-  process.stdout.write("\r\x1b[2K");
-
-  const { size: filebytes } = await stat(filepath);
-
-  return { filebytes, filepath };
-}
-
 export function logThroughput(
   name: string,
   endTime: bigint,
@@ -179,25 +200,4 @@ export function whatRuntime() {
     : typeof Deno !== "undefined"
       ? "Deno"
       : "Node";
-}
-
-export async function runTestCleanup() {
-  const cleanups: Function[] = (globalThis as any).__test_cleanups__;
-
-  if (cleanups?.length) {
-    let failedCount = 0;
-
-    for (const cleanup of cleanups) {
-      try {
-        await cleanup();
-      } catch (err) {
-        failedCount++;
-        console.error(err);
-      }
-    }
-
-    if (failedCount > 0) {
-      console.log(`[41mFailed cleanups: ${failedCount}[0m`);
-    }
-  }
 }

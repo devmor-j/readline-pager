@@ -166,6 +166,7 @@ async function runReadlinePager(
 ) {
   const options: PagerOptions = {
     pageSize: batchSize,
+    tryNative: false,
   };
 
   if (args["chunk-size"]) options.chunkSize = args["chunk-size"];
