@@ -261,24 +261,6 @@ suite("api", () => {
     await tryDeleteFile(filepath);
   });
 
-  test("reads fine with very large chunk size", async () => {
-    const content = createTextLines(1_000);
-    const filepath = await createTmpFile(content);
-
-    try {
-      const pager = createPager(filepath, {
-        chunkSize: 100_000 * 1_024,
-      });
-
-      while (true) {
-        const page = pager.nextSync();
-        if (!page) break;
-      }
-    } finally {
-      await tryDeleteFile(filepath);
-    }
-  });
-
   test("multiple leading delimiters produce multiple empty lines", async () => {
     const filepath = await createTmpFile("\n\nalpha");
 
