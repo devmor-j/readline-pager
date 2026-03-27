@@ -3,14 +3,14 @@ import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import type { PagerOptions } from "../dist/main.mjs";
 import { createNativePager, createPager } from "../dist/main.mjs";
-import type { BenchmarkArgs } from "./_utils.ts";
+import type { BenchmarkArgs } from "./utils.ts";
 import {
   createBigTmpFile,
   logThroughput,
   parseProcessArgv,
   tryDeleteFile,
   whatRuntime,
-} from "./_utils.ts";
+} from "./utils.ts";
 
 async function runNodeReadline(filepath: string) {
   const readline = createInterface({ input: createReadStream(filepath) });
@@ -166,6 +166,7 @@ async function runReadlinePager(
 ) {
   const options: PagerOptions = {
     pageSize: batchSize,
+    tryNative: false,
   };
 
   if (args["chunk-size"]) options.chunkSize = args["chunk-size"];

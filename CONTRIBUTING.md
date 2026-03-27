@@ -1,17 +1,19 @@
-# Contributing to readline-pager
+# Contributing to `readline-pager`
 
 Thanks for your interest in contributing.
 
-## Requirements
+## 📋 Requirements
 
-- Node.js **>= 18.12**
-- Recommended dev environment: Node v25.x (used during development)
-- TypeScript ~5.9.x
+- Minimum supported Node.js: **>= 18.12**
+- Recommended dev environment: Node.js v25.x
+- TypeScript 6.x
 
-## Getting Started
+## 🚀 Getting Started
+
+Install dependencies and run tests:
 
 ```bash
-npm ci
+npm i
 npm test
 ```
 
@@ -19,47 +21,63 @@ Tests run using the built-in Node test runner with coverage enabled.
 
 ---
 
-## Project Structure
+## 📂 Project Structure
 
-- `src/main.ts` — core pager implementation
-  - forward reader
-  - backward reader
-  - worker integration
-
-- `src/worker.ts` — forward reader running in a worker thread
-- `test/` — coverage-focused unit tests
-- `dist/` — compiled output (published)
+- `src/main.ts` — pager factory
+- `src/reader/` — readers engine for forward, backward and worker
+- `src/worker.ts` — worker-thread implementation for forward reading
+- `src/native.ts` — native pager factory
+- `src/native/pager.native.cc` — native reader engine implemented in C++ (forward and backward)
+- `test/` — test files and benchmark tools with some utils only for tests
 
 ---
 
-## Design Principles
+## ⚠️ Important Notes
 
-- Zero runtime dependencies
-- Memory-efficient (never load full file)
-- Page-based iteration (`string[]`)
-- Async-first API
-- Backward reading support
-- Optional worker isolation
-- Performance-oriented (minimal allocations in hot paths)
-
----
-
-## Important Notes
-
-- `pageSize` controls batching granularity.
-- `prefetch` controls internal buffering depth.
-- Worker mode supports **forward reading only**.
-- Backward reading uses chunked reverse scanning with delimiter search.
-- Async iterator syntax is supported, but `while + next()` is slightly faster in hot paths.
+- `pageSize` controls how many lines are returned per page.
+- `chunkSize` strongly affects performance and should be tuned per environment.
+- `prefetch` controls internal buffering of pages.
+- Worker mode is **forward-only** and cannot be combined with backward reading.
+- Native mode (`createNativePager`) supports only single-character delimiters and a limited subset of options.
+- The async iterator (`for await...of`) and manual iteration (`next()`) are both supported; manual iteration may provide more control in some cases.
 
 ---
 
-## Pull Requests
+## 🏠 Native (C++) Architecture Notes
 
-- Keep changes minimal and focused.
-- Add tests for new behavior.
-- Avoid introducing dependencies.
-- Preserve ESM-only architecture.
-- Ensure coverage does not regress.
+This N-API module relies on C++23 features to optimize high-throughput file reading.
 
-If you’re improving performance, include benchmark numbers.
+- **I/O & Memory:** Uses `mmap` and `madvise` for zero-copy forward reads. Backward reads must allocate new memory to aggregate reversed segments.
+- **SIMD Vectorization:** Runtime CPU detection routes delimiter scanning to AVX2 or NEON paths, processing 64KB blocks against a single-byte delimiter.
+- **Concurrency:** A background `std::jthread` feeds a bounded, power-of-two ring buffer using `std::atomic` variables, a mutex, and a condition variable.
+- **Lifecycle Management:** Atomic reference counting bridges the N-API async workers, the background thread, and V8 garbage collection finalizers.
+
+---
+
+## 🌿 Pull Requests
+
+Please follow these guidelines:
+
+- Keep changes small and focused
+- Ensure all tests pass (keep lines coverage above 90%)
+- Add or update tests for any new behavior
+- Do not introduce external dependencies
+- Maintain the existing API shape unless a change is discussed in an issue first
+- Avoid breaking changes without strong justification
+- Must work for both ESM and CommonJS users.
+
+## 🐛 Reporting Issues
+
+When opening an issue, include:
+
+- Node.js version
+- Operating system
+- Minimal reproduction steps
+- Expected vs actual behavior
+- Relevant code snippet or file sample
+
+---
+
+## 📜 License
+
+By contributing, you agree that your contributions will be licensed under the MIT License.

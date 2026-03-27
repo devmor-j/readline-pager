@@ -11,21 +11,27 @@ export interface PagerOptions extends Partial<ReaderOptions> {
   tryNative?: boolean;
 }
 
-export interface Pager extends AsyncIterable<string[]>, Iterable<string[]> {
-  next(): Promise<string[] | null>;
-  nextSync(): string[] | null;
-  close(): Promise<void>;
-}
-
 export interface NativeReaderOptions {
   pageSize: number;
   delimiter: string;
   backward: boolean;
 }
 
-export type AddonFD = object | null;
+export type WorkerMessage =
+  | {
+      type: "page";
+      data: string[];
+    }
+  | {
+      type: "error";
+      error: unknown;
+    }
+  | {
+      type: "done";
+    };
 
-export type AddonData = Buffer | null;
+type AddonFD = object | null;
+type AddonData = Buffer | null;
 
 export interface NativeAddon {
   open: (
@@ -37,4 +43,12 @@ export interface NativeAddon {
   next: (fd: AddonFD) => Promise<AddonData>;
   nextSync: (fd: AddonFD) => AddonData;
   close: (fd: AddonFD) => Promise<void>;
+}
+
+export interface Pager {
+  next(): Promise<string[] | null>;
+  nextSync(): string[] | null;
+  close(): Promise<void>;
+  [Symbol.asyncIterator](): AsyncIterator<string[]>;
+  [Symbol.iterator](): Iterator<string[]>;
 }
