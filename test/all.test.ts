@@ -8,11 +8,135 @@ import {
   createTmpFile,
   runTestCleanup,
   tryDeleteFile,
-} from "./_utils.ts";
+} from "./utils.ts";
 
 after(runTestCleanup);
 
-suite("defaults", () => {
+suite("validation", () => {
+  test("it throws if filepath is missing", () => {
+    assert.throws(() => {
+      createPager("");
+    });
+    assert.throws(() => {
+      createNativePager("");
+    });
+  });
+
+  test("createPager throws when backward and useWorker both true", () => {
+    assert.throws(
+      () => createPager("x", { backward: true, useWorker: true }),
+      /backward not supported with useWorker/,
+    );
+  });
+
+  test("it throws when used with native reading", () => {
+    assert.throws(
+      () =>
+        createPager("x", {
+          useWorker: true,
+          tryNative: true,
+        }),
+      /tryNative not supported/,
+    );
+  });
+
+  test("createPager throws on invalid numeric args", () => {
+    assert.throws(
+      () => createPager("x", { pageSize: 0 }),
+      /pageSize must be >= 1/,
+    );
+    assert.throws(
+      () => createPager("x", { prefetch: 0 }),
+      /prefetch must be >= 1/,
+    );
+  });
+});
+
+suite("files", () => {
+  test("throws if file cannot be read due to permissions", async () => {
+    const filepath = await createTmpFile("secret");
+
+    try {
+      await chmod(filepath, 0o000);
+
+      await assert.rejects(async () => {
+        createPager(filepath);
+      });
+    } finally {
+      await chmod(filepath, 0o644).catch(() => {});
+      await tryDeleteFile(filepath);
+    }
+  });
+
+  test("empty file yields single empty line", async () => {
+    const content = "";
+    const filepath = await createTmpFile(content);
+
+    try {
+      const pager = createPager(filepath, { tryNative: false });
+
+      const firstPage = await pager.next();
+      assert.deepEqual(firstPage, [""]);
+
+      const lastPage = await pager.next();
+      assert.equal(lastPage, null);
+      assert.equal(firstPage?.length, 1);
+      assert.equal(firstPage?.at(0), "");
+      assert.equal(firstPage?.at(-1), "");
+    } finally {
+      await tryDeleteFile(filepath);
+    }
+  });
+
+  test("multiple lines without trailing delimiter", async () => {
+    const content = "a\nb\nc";
+    const filepath = await createTmpFile(content);
+
+    try {
+      const pager = createPager(filepath, { tryNative: false });
+
+      const lines: string[] = [];
+
+      while (true) {
+        const page = pager.nextSync();
+        if (!page) break;
+        lines.push(...page);
+      }
+
+      assert.deepEqual(lines, ["a", "b", "c"]);
+      assert.equal(lines.length, 3);
+    } finally {
+      await tryDeleteFile(filepath);
+    }
+  });
+
+  test("empty lines do not signal end-of-file", async () => {
+    const lines = ["line-0", "", "line-2"];
+    const content = lines.join("\n");
+    const filepath = await createTmpFile(content);
+
+    try {
+      const pager = createPager(filepath, {
+        pageSize: 1,
+      });
+
+      const collected: string[] = [];
+
+      for await (const page of pager) {
+        assert.ok(page !== null, "pager returned null before EOF");
+        assert.ok(Array.isArray(page));
+
+        collected.push(...page);
+      }
+
+      assert.deepEqual(collected, lines);
+    } finally {
+      await tryDeleteFile(filepath);
+    }
+  });
+});
+
+suite("api", () => {
   test("forward sync iterator break closes file", async () => {
     const content = createTextLines(500);
     const filepath = await createTmpFile(content);
@@ -31,9 +155,7 @@ suite("defaults", () => {
       await tryDeleteFile(filepath);
     }
   });
-});
 
-suite("backward", () => {
   test("backward reader empty file sync + async paths", async () => {
     const filepath1 = await createTmpFile("");
 
@@ -116,9 +238,7 @@ suite("backward", () => {
       await tryDeleteFile(filepath);
     }
   });
-});
 
-suite("chunkSize", () => {
   test("backward async reader handles truncated read (read-failure path)", async () => {
     const content = "a\nb\nc\nd\n";
     const filepath = await createTmpFile(content);
@@ -158,9 +278,7 @@ suite("chunkSize", () => {
       await tryDeleteFile(filepath);
     }
   });
-});
 
-suite("delimiter", () => {
   test("multiple leading delimiters produce multiple empty lines", async () => {
     const filepath = await createTmpFile("\n\nalpha");
 
@@ -179,9 +297,7 @@ suite("delimiter", () => {
       await tryDeleteFile(filepath);
     }
   });
-});
 
-suite("prefetch", () => {
   test("sync iterator (for...of) honors prefetch and page boundaries", async () => {
     const total = 12;
     const content = createTextLines(total);
@@ -215,9 +331,7 @@ suite("prefetch", () => {
       await tryDeleteFile(filepath);
     }
   });
-});
 
-suite("useWorker", () => {
   test("close() stops worker and prevents further pages", async () => {
     const content = createTextLines(10_000);
     const filepath = await createTmpFile(content);
@@ -240,17 +354,6 @@ suite("useWorker", () => {
     } finally {
       await tryDeleteFile(filepath);
     }
-  });
-
-  test("it throws when used with native reading", () => {
-    assert.throws(
-      () =>
-        createPager("x", {
-          useWorker: true,
-          tryNative: true,
-        }),
-      /tryNative not supported/,
-    );
   });
 
   test("worker nextSync returns pages if available", async () => {
@@ -319,121 +422,6 @@ suite("useWorker", () => {
 
       const page = await pager.next();
       assert.deepEqual(page, null);
-    } finally {
-      await tryDeleteFile(filepath);
-    }
-  });
-});
-
-suite("validation", () => {
-  test("createPager throws when backward and useWorker both true", () => {
-    assert.throws(
-      () => createPager("x", { backward: true, useWorker: true }),
-      /backward not supported with useWorker/,
-    );
-  });
-
-  test("createPager throws on invalid numeric args", () => {
-    assert.throws(
-      () => createPager("x", { pageSize: 0 }),
-      /pageSize must be >= 1/,
-    );
-    assert.throws(
-      () => createPager("x", { prefetch: 0 }),
-      /prefetch must be >= 1/,
-    );
-  });
-});
-
-suite("filepath", () => {
-  test("it throws if filepath is missing", () => {
-    assert.throws(() => {
-      createPager("");
-    });
-    assert.throws(() => {
-      createNativePager("");
-    });
-  });
-
-  test("throws if file cannot be read due to permissions", async () => {
-    const filepath = await createTmpFile("secret");
-
-    try {
-      await chmod(filepath, 0o000);
-
-      await assert.rejects(async () => {
-        createPager(filepath);
-      });
-    } finally {
-      await chmod(filepath, 0o644).catch(() => {});
-      await tryDeleteFile(filepath);
-    }
-  });
-});
-
-suite("exceptional files", () => {
-  test("empty file yields single empty line", async () => {
-    const content = "";
-    const filepath = await createTmpFile(content);
-
-    try {
-      const pager = createPager(filepath, { tryNative: false });
-
-      const firstPage = await pager.next();
-      assert.deepEqual(firstPage, [""]);
-
-      const lastPage = await pager.next();
-      assert.equal(lastPage, null);
-      assert.equal(firstPage?.length, 1);
-      assert.equal(firstPage?.at(0), "");
-      assert.equal(firstPage?.at(-1), "");
-    } finally {
-      await tryDeleteFile(filepath);
-    }
-  });
-
-  test("multiple lines without trailing delimiter", async () => {
-    const content = "a\nb\nc";
-    const filepath = await createTmpFile(content);
-
-    try {
-      const pager = createPager(filepath, { tryNative: false });
-
-      const lines: string[] = [];
-
-      while (true) {
-        const page = pager.nextSync();
-        if (!page) break;
-        lines.push(...page);
-      }
-
-      assert.deepEqual(lines, ["a", "b", "c"]);
-      assert.equal(lines.length, 3);
-    } finally {
-      await tryDeleteFile(filepath);
-    }
-  });
-
-  test("empty lines do not signal end-of-file", async () => {
-    const lines = ["line-0", "", "line-2"];
-    const content = lines.join("\n");
-    const filepath = await createTmpFile(content);
-
-    try {
-      const pager = createPager(filepath, {
-        pageSize: 1,
-      });
-
-      const collected: string[] = [];
-
-      for await (const page of pager) {
-        assert.ok(page !== null, "pager returned null before EOF");
-        assert.ok(Array.isArray(page));
-
-        collected.push(...page);
-      }
-
-      assert.deepEqual(collected, lines);
     } finally {
       await tryDeleteFile(filepath);
     }
