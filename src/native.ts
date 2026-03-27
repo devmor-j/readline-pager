@@ -1,11 +1,6 @@
 import { createRequire } from "node:module";
 import { arch, platform } from "node:os";
-import type {
-  AddonFD,
-  NativeAddon,
-  NativeReaderOptions,
-  Pager,
-} from "./types.js";
+import type { NativeAddon, NativeReaderOptions, Pager } from "./types.js";
 
 const require = createRequire(import.meta.url);
 
@@ -69,13 +64,8 @@ export function createNativePager(
   }
 
   const nativePager = loadNativeAddon();
-
-  let fd: AddonFD = null;
+  let fd = nativePager.open(filepath, pageSize, delimiter, backward);
   let closed = false;
-
-  const init = () => {
-    fd = nativePager.open(filepath, pageSize, delimiter, backward);
-  };
 
   const next = async () => {
     if (closed || !fd) return null;
@@ -96,9 +86,13 @@ export function createNativePager(
   };
 
   const close = async () => {
-    if (!closed || fd) {
-      closed = true;
-      await nativePager.close(fd);
+    if (closed) return;
+    closed = true;
+
+    if (fd) {
+      try {
+        await nativePager.close(fd);
+      } catch {}
       fd = null;
     }
   };
@@ -106,8 +100,6 @@ export function createNativePager(
   function tryClose() {
     void close().catch(() => {});
   }
-
-  init();
 
   return {
     next,

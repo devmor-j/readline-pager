@@ -1,6 +1,6 @@
 import { Worker } from "node:worker_threads";
-import { createRingBuffer } from "../queue.js";
-import type { Pager, ReaderOptions } from "../types.js";
+import { createRingBuffer } from "../helper.js";
+import type { Pager, ReaderOptions, WorkerMessage } from "../types.js";
 
 // TODO: refactor with better technique
 const isESM = typeof import.meta !== "undefined";
@@ -15,10 +15,10 @@ export function createWorkerReader(
 ): Pager {
   const { prefetch } = options;
 
-  const pageQueue = createRingBuffer<string[]>(Math.max(2, prefetch + 1));
-
   let done = false;
   let closed = false;
+
+  const pageQueue = createRingBuffer<string[]>(Math.max(2, prefetch + 1));
 
   const worker = new Worker(new URL(workerFile, import.meta.url), {
     workerData: {
@@ -27,14 +27,18 @@ export function createWorkerReader(
     },
   });
 
-  worker.on("message", (msg: any) => {
-    if (msg.type === "page") {
-      pageQueue.push(msg.data);
-    }
-
-    if (msg.type === "done") {
-      done = true;
-      pageQueue.wake();
+  worker.on("message", (msg: WorkerMessage) => {
+    switch (msg.type) {
+      case "page": {
+        pageQueue.push(msg.data);
+        break;
+      }
+      case "done":
+      case "error": {
+        done = true;
+        pageQueue.wake();
+        break;
+      }
     }
   });
 
@@ -59,10 +63,14 @@ export function createWorkerReader(
   }
 
   async function close() {
+    if (closed) return;
     closed = true;
     done = true;
     pageQueue.clear();
-    await worker.terminate();
+
+    try {
+      await worker.terminate();
+    } catch {}
   }
 
   function tryClose() {

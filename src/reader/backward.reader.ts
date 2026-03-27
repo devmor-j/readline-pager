@@ -1,6 +1,7 @@
 import { closeSync, openSync, readSync, statSync } from "node:fs";
-import { FileHandle, open } from "node:fs/promises";
-import { createRingBuffer } from "../queue.js";
+import type { FileHandle } from "node:fs/promises";
+import { open } from "node:fs/promises";
+import { createRingBuffer } from "../helper.js";
 import type { Pager, ReaderOptions } from "../types.js";
 
 export function createBackwardReader(
@@ -14,158 +15,146 @@ export function createBackwardReader(
 
   let fd: FileHandle | null = null;
   let fdSync: number | null = null;
+
   let pos = 0;
   let buffer = "";
+
   let done = false;
   let closed = false;
+  let flushed = false;
   let startsWithDelimiter = false;
+
+  function consumeBuffer() {
+    let idx: number;
+    while ((idx = buffer.lastIndexOf(delimiter)) !== -1) {
+      const line = buffer.slice(idx + delimiter.length);
+      buffer = buffer.slice(0, idx);
+      local.push(line);
+
+      while (local.length >= pageSize) {
+        pageQueue.push(local.splice(0, pageSize));
+      }
+    }
+  }
+
+  function flushTail() {
+    if (flushed) return;
+    flushed = true;
+
+    if (buffer.length > 0) {
+      local.push(buffer);
+    } else if (startsWithDelimiter) {
+      local.push("");
+    }
+
+    buffer = "";
+
+    while (local.length > 0) {
+      const page = local.slice(local.length - Math.min(pageSize, local.length));
+      local.length -= page.length;
+      pageQueue.push(page);
+    }
+
+    done = true;
+    pageQueue.wake();
+  }
 
   fdSync = openSync(filepath, "r");
   pos = statSync(filepath).size;
 
   if (pos === 0) {
-    pageQueue.push([buffer]);
+    pageQueue.push([""]);
     done = true;
+    flushed = true;
     pageQueue.wake();
   }
 
-  (async () => {
-    try {
-      fd = await open(filepath, "r");
-      pos = (await fd.stat()).size;
-      if (pos === 0) {
-        if (!done) {
-          pageQueue.push([buffer]);
-          done = true;
-        }
-        if (fd) {
+  void (async () => {
+    fd = await open(filepath, "r");
+    pos = (await fd.stat()).size;
+
+    if (pos === 0) {
+      if (!done) {
+        pageQueue.push([""]);
+        done = true;
+        flushed = true;
+      }
+
+      if (fd) {
+        try {
           await fd.close();
-          fd = null;
-        }
-        pageQueue.wake();
-        return;
+        } catch {}
+        fd = null;
       }
 
-      while (!done && !closed) {
-        while (pageQueue.count < prefetch && pos > 0 && !closed) {
-          const readSize = Math.min(chunkSize, pos);
-          pos -= readSize;
-
-          const buf = Buffer.allocUnsafe(readSize);
-          await fd.read(buf, 0, readSize, pos);
-
-          buffer = buf.toString("utf8") + buffer;
-
-          if (pos === 0 && buffer.startsWith(delimiter)) {
-            startsWithDelimiter = true;
-          }
-
-          let idx: number;
-          while ((idx = buffer.lastIndexOf(delimiter)) !== -1) {
-            const line = buffer.slice(idx + delimiter.length);
-            buffer = buffer.slice(0, idx);
-            local.push(line);
-
-            while (local.length >= pageSize) {
-              const page = local.splice(0, pageSize);
-              pageQueue.push(page);
-            }
-          }
-        }
-
-        if (pos === 0 && !done) {
-          if (buffer.length > 0) {
-            local.push(buffer);
-          } else if (startsWithDelimiter) {
-            local.push("");
-          }
-          buffer = "";
-
-          while (local.length > 0 && !closed) {
-            const page = local.slice(
-              local.length - Math.min(pageSize, local.length),
-            );
-            local.length -= page.length;
-            pageQueue.push(page);
-          }
-
-          done = true;
-          if (fd) {
-            await fd.close();
-            fd = null;
-          }
-          pageQueue.wake();
-          break;
-        }
-
-        if (!done && !closed) {
-          await new Promise((r) => setImmediate(r));
-        }
-      }
-    } catch {
-      done = true;
       pageQueue.wake();
-      try {
+      return;
+    }
+
+    while (!done && !closed) {
+      while (pageQueue.count < prefetch && pos > 0 && !closed) {
+        const readSize = Math.min(chunkSize, pos);
+        pos -= readSize;
+
+        const buf = Buffer.allocUnsafe(readSize);
+        const { bytesRead } = await fd.read(buf, 0, readSize, pos);
+
+        buffer = buf.toString("utf8", 0, bytesRead) + buffer;
+
+        if (pos === 0 && buffer.startsWith(delimiter)) {
+          startsWithDelimiter = true;
+        }
+
+        consumeBuffer();
+      }
+
+      if (pos === 0 && !flushed) {
+        flushTail();
+
         if (fd) {
-          await fd.close();
+          try {
+            await fd.close();
+          } catch {}
           fd = null;
         }
-      } catch {}
+
+        break;
+      }
+
+      if (!done && !closed) {
+        await new Promise((r) => setImmediate(r));
+      }
     }
   })();
 
   function fillSync() {
-    if (done || closed) return;
-    if (fdSync === null) return;
+    if (done || closed || !fdSync) return;
 
     while (pageQueue.count < prefetch && pos > 0 && !closed) {
       const readSize = Math.min(chunkSize, pos);
       pos -= readSize;
 
       const buf = Buffer.allocUnsafe(readSize);
-      readSync(fdSync, buf, 0, readSize, pos);
+      const bytesRead = readSync(fdSync, buf, 0, readSize, pos);
 
-      buffer = buf.toString("utf8") + buffer;
+      buffer = buf.toString("utf8", 0, bytesRead) + buffer;
 
       if (pos === 0 && buffer.startsWith(delimiter)) {
         startsWithDelimiter = true;
       }
 
-      let idx: number;
-      while ((idx = buffer.lastIndexOf(delimiter)) !== -1) {
-        const line = buffer.slice(idx + delimiter.length);
-        buffer = buffer.slice(0, idx);
-        local.push(line);
-
-        while (local.length >= pageSize) {
-          const page = local.splice(0, pageSize);
-          pageQueue.push(page);
-        }
-      }
+      consumeBuffer();
     }
 
-    if (pos === 0 && !done) {
-      if (buffer.length > 0) {
-        local.push(buffer);
-      } else if (startsWithDelimiter) {
-        local.push("");
-      }
-      buffer = "";
+    if (pos === 0 && !flushed) {
+      flushTail();
 
-      while (local.length > 0) {
-        const page = local.slice(
-          local.length - Math.min(pageSize, local.length),
-        );
-        local.length -= page.length;
-        pageQueue.push(page);
-      }
-
-      done = true;
-      if (fdSync !== null) {
-        closeSync(fdSync);
+      if (fdSync) {
+        try {
+          closeSync(fdSync);
+        } catch {}
         fdSync = null;
       }
-      pageQueue.wake();
     }
   }
 
@@ -181,22 +170,23 @@ export function createBackwardReader(
   }
 
   async function close() {
+    if (closed) return;
     closed = true;
     done = true;
     pageQueue.clear();
+
+    if (fdSync) {
+      try {
+        closeSync(fdSync);
+      } catch {}
+      fdSync = null;
+    }
 
     if (fd) {
       try {
         await fd.close();
       } catch {}
       fd = null;
-    }
-
-    if (fdSync !== null) {
-      try {
-        closeSync(fdSync);
-      } catch {}
-      fdSync = null;
     }
   }
 
@@ -227,19 +217,19 @@ export function createBackwardReader(
         done = true;
         pageQueue.clear();
 
-        try {
-          if (fdSync) {
+        if (fdSync) {
+          try {
             closeSync(fdSync);
-          }
-        } catch {}
-        fdSync = null;
+          } catch {}
+          fdSync = null;
+        }
 
-        try {
-          if (fd?.fd) {
+        if (fd?.fd) {
+          try {
             closeSync(fd.fd);
-          }
-        } catch {}
-        fd = null;
+          } catch {}
+          fd = null;
+        }
       }
     },
   };
