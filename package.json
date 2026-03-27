@@ -1,6 +1,6 @@
 {
   "name": "readline-pager",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "scripts": {
     "build:js": "tsdown",
     "build:native": "node-gyp rebuild",
@@ -24,10 +24,10 @@
     "typescript": "~6.0.2"
   },
   "optionalDependencies": {
-    "@devmor-j/readline-pager-linux-arm64": "0.6.1",
-    "@devmor-j/readline-pager-linux-musl-arm64": "0.6.1",
-    "@devmor-j/readline-pager-linux-musl-x64": "0.6.1",
-    "@devmor-j/readline-pager-linux-x64": "0.6.1"
+    "@devmor-j/readline-pager-linux-arm64": "0.6.2",
+    "@devmor-j/readline-pager-linux-musl-arm64": "0.6.2",
+    "@devmor-j/readline-pager-linux-musl-x64": "0.6.2",
+    "@devmor-j/readline-pager-linux-x64": "0.6.2"
   },
   "gypfile": false,
   "type": "module",
