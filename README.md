@@ -68,7 +68,7 @@ let page;
 const pager = createPager("./bigfile.txt");
 while ((page = pager.nextSync()) !== null) {}
 
-// Native C++ (fastest)
+// Native C++
 for await (const page of createNativePager("./bigfile.txt")) {
 }
 ```
@@ -87,6 +87,12 @@ createPager(filepath, {
   useWorker?: boolean,  // default: false
   tryNative?: boolean,  // default: true
 });
+
+createNativePager(filepath, {
+  pageSize?: number,    // default: 1_000
+  delimiter?: string,   // default: "\n"
+  backward?: boolean,   // default: false
+});
 ```
 
 - `chunkSize` — number of bytes read per I/O operation.
@@ -98,7 +104,7 @@ createPager(filepath, {
 - `tryNative` — attempts to use the native reader, falls back to the non-native version if it fails.
 
 > **Note:**
-> `createNativePager` supports only `pageSize`, `delimiter`, and `backward` options and does **not** support multi-character delimiters.
+> `createNativePager` requires x86 AVX2 or ARM NEON CPU instruction set extensions and will throw if they are not available. It also does **not** support multi-character delimiters due to fast SIMD-based scanning.
 
 ---
 
@@ -138,7 +144,7 @@ Run the benchmark locally:
 npm run benchmark:node
 
 # or customize with args
-node test/_benchmark.ts --lines=20000 --page-size=500 --backward
+node test/benchmark.ts --lines=20000 --page-size=500 --backward
 ```
 
 > Test setup: generated text files (UUID lines), NVMe SSD, Node.js runtime.

@@ -22,10 +22,7 @@ async function runNodeReadline(filepath: string) {
 
   const endTime = process.hrtime.bigint();
 
-  return {
-    startTime,
-    endTime,
-  };
+  return endTime - startTime;
 }
 
 async function runDenoReadlines(filepath: string) {
@@ -49,10 +46,7 @@ async function runDenoReadlines(filepath: string) {
 
   const endTime = process.hrtime.bigint();
 
-  return {
-    startTime,
-    endTime,
-  };
+  return endTime - startTime;
 }
 
 async function runDenoReadlinesBatched(filepath: string, batchSize: number) {
@@ -82,10 +76,7 @@ async function runDenoReadlinesBatched(filepath: string, batchSize: number) {
 
   const endTime = process.hrtime.bigint();
 
-  return {
-    startTime,
-    endTime,
-  };
+  return endTime - startTime;
 }
 
 async function runBunReadlines(filepath: string) {
@@ -106,10 +97,7 @@ async function runBunReadlines(filepath: string) {
 
   const endTime = process.hrtime.bigint();
 
-  return {
-    startTime,
-    endTime,
-  };
+  return endTime - startTime;
 }
 
 async function runBunReadlinesBatched(filepath: string, batchSize: number) {
@@ -153,10 +141,7 @@ async function runBunReadlinesBatched(filepath: string, batchSize: number) {
 
   const endTime = process.hrtime.bigint();
 
-  return {
-    startTime,
-    endTime,
-  };
+  return endTime - startTime;
 }
 
 async function runReadlinePager(
@@ -185,10 +170,7 @@ async function runReadlinePager(
 
   const endTime = process.hrtime.bigint();
 
-  return {
-    startTime,
-    endTime,
-  };
+  return endTime - startTime;
 }
 
 async function runNativeReadlinePager(filepath: string, batchSize: number) {
@@ -206,10 +188,10 @@ async function runNativeReadlinePager(filepath: string, batchSize: number) {
 
     const endTime = process.hrtime.bigint();
 
-    return { startTime, endTime };
-  } catch {
-    return null;
-  }
+    return endTime - startTime;
+  } catch {}
+
+  return null;
 }
 
 async function benchmark(args = parseProcessArgv()) {
@@ -226,60 +208,45 @@ async function benchmark(args = parseProcessArgv()) {
     `📦 Benchmark: ${LINES.toLocaleString()} lines | ${Math.round(fileMB)} MB | [32m${runtime}[0m`,
   );
 
-  {
-    const { startTime, endTime } = await runNodeReadline(filepath);
-    logThroughput("readline", endTime, startTime, filebytes);
-  }
-
   if (runtime === "Deno") {
     {
-      const { startTime, endTime } = await runDenoReadlines(filepath);
-      logThroughput("deno:line", endTime, startTime, filebytes);
+      const durationNS = await runDenoReadlines(filepath);
+      logThroughput("deno:line", durationNS, filebytes);
     }
 
     {
-      const { startTime, endTime } = await runDenoReadlinesBatched(
-        filepath,
-        BATCH_SIZE,
-      );
-      logThroughput("deno:page", endTime, startTime, filebytes);
+      const durationNS = await runDenoReadlinesBatched(filepath, BATCH_SIZE);
+      logThroughput("deno:page", durationNS, filebytes);
     }
   }
 
   if (runtime === "Bun") {
     {
-      const { startTime, endTime } = await runBunReadlines(filepath);
-      logThroughput("bun:line", endTime, startTime, filebytes);
+      const durationNS = await runBunReadlines(filepath);
+      logThroughput("bun:line", durationNS, filebytes);
     }
 
     {
-      const { startTime, endTime } = await runBunReadlinesBatched(
-        filepath,
-        BATCH_SIZE,
-      );
-      logThroughput("bun:page", endTime, startTime, filebytes);
+      const durationNS = await runBunReadlinesBatched(filepath, BATCH_SIZE);
+      logThroughput("bun:page", durationNS, filebytes);
     }
   }
 
   {
-    const { startTime, endTime } = await runReadlinePager(
-      filepath,
-      BATCH_SIZE,
-      args,
-    );
-    logThroughput("readline-pager:js", endTime, startTime, filebytes);
+    const durationNS = await runNodeReadline(filepath);
+    logThroughput("readline", durationNS, filebytes);
   }
 
   {
-    const result = await runNativeReadlinePager(filepath, BATCH_SIZE);
+    const durationNS = await runReadlinePager(filepath, BATCH_SIZE, args);
+    logThroughput("readline-pager:js", durationNS, filebytes);
+  }
 
-    if (result) {
-      logThroughput(
-        "readline-pager:cpp",
-        result.endTime,
-        result.startTime,
-        filebytes,
-      );
+  {
+    const durationNS = await runNativeReadlinePager(filepath, BATCH_SIZE);
+
+    if (durationNS !== null) {
+      logThroughput("readline-pager:cpp", durationNS, filebytes);
     }
   }
 
