@@ -7,15 +7,34 @@
         "-O3",
         "-std=c++23",
         "-fno-exceptions",
+        "-fno-rtti",
         "-Wall",
-        "-fPIC"
+        "-Wextra",
+        "-fPIC",
+        "-flto",
+        "-fno-strict-aliasing",
+        "-fomit-frame-pointer"
       ],
-      "xcode_settings": {
-        "CLANG_CXX_LANGUAGE_STANDARD": "c++23",
-        "GCC_ENABLE_CPP_EXCEPTIONS": "NO",
-        "OTHER_CPLUSPLUSFLAGS": [ "-O3", "-fno-exceptions" ]
-      },
+      "ldflags": [
+        "-flto",
+        "-Wl,-O3",
+        "-Wl,--as-needed",
+        "-Wl,--strip-all"
+      ],
       "conditions": [
+        ['target_arch=="x64"', {
+          "cflags_cc": [
+            "-mavx2",
+            "-mbmi",
+            "-mbmi2",
+            "-mlzcnt"
+          ]
+        }],
+        ['target_arch=="arm64"', {
+          "cflags_cc": [
+            "-march=armv8-a+simd"
+          ]
+        }],
         ['OS=="linux"', {
           "libraries": [ "-lrt" ]
         }]
