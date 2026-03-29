@@ -7,10 +7,10 @@ const { chunkSize, pageSize, delimiter } = options as ReaderOptions;
 
 const backpressure = pageSize * 8;
 
-const post = (msg: WorkerMessage) => {
+function post(msg: WorkerMessage) {
   if (!parentPort) process.exit(1);
   parentPort.postMessage(msg);
-};
+}
 
 void (async () => {
   try {

@@ -7,7 +7,7 @@
     "build": "npm run build:native && npm run build:js",
     "pkg:native": "node scripts/package-native.ts",
     "pretest": "npm run build",
-    "test": "TEST_CLEANUPS=1 node --test --experimental-test-coverage test/**/*.test.ts",
+    "test": "PAGER_TEST_CLEANUPS=1 node --test --experimental-test-coverage test/**/*.test.ts",
     "prepublishOnly": "npm run build && npm run test",
     "benchmark:node": "node test/benchmark.ts",
     "benchmark:deno": "deno --allow-write --allow-read --allow-env test/benchmark.ts",

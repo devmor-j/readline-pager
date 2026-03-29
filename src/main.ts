@@ -42,7 +42,7 @@ export function createPager(
     }
   }
 
-  const _options: ReaderOptions = {
+  const readerOptions: ReaderOptions = {
     chunkSize,
     pageSize,
     prefetch,
@@ -52,14 +52,14 @@ export function createPager(
   let nativeReader: Pager | undefined;
 
   if (tryNative) {
-    const _nativeOptions: NativeReaderOptions = {
+    const nativeOptions: NativeReaderOptions = {
       pageSize,
       delimiter,
       backward,
     };
 
     try {
-      nativeReader = createNativePager(filepath, _nativeOptions);
+      nativeReader = createNativePager(filepath, nativeOptions);
     } catch {}
   }
 
@@ -67,21 +67,19 @@ export function createPager(
     tryNative && nativeReader
       ? nativeReader
       : useWorker
-        ? createWorkerReader(filepath, _options)
+        ? createWorkerReader(filepath, readerOptions)
         : backward
-          ? createBackwardReader(filepath, _options)
-          : createForwardReader(filepath, _options);
+          ? createBackwardReader(filepath, readerOptions)
+          : createForwardReader(filepath, readerOptions);
 
-  if (process.env.TEST_CLEANUPS) {
-    (globalThis as any).__test_cleanups__ ??= [];
-    (globalThis as any).__test_cleanups__.push(reader.close);
+  if (process.env.PAGER_TEST_CLEANUPS) {
+    (globalThis as any).__pager_test_cleanups__ ??= [];
+    (globalThis as any).__pager_test_cleanups__.push(reader.close);
   }
 
   return reader;
 }
 
 export default createPager;
-
-export { createNativePager } from "./native.js";
-
 export type * from "./types.js";
+export { createNativePager };

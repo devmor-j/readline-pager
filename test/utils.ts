@@ -87,7 +87,7 @@ export async function createBigTmpFile(
 }
 
 export async function runTestCleanup() {
-  const cleanups: Function[] = (globalThis as any).__test_cleanups__;
+  const cleanups: Function[] = (globalThis as any).__pager_test_cleanups__;
 
   if (cleanups?.length) {
     let failedCount = 0;
