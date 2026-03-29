@@ -180,11 +180,10 @@ export function parseProcessArgv(): BenchmarkArgs {
 
 export function logThroughput(
   name: string,
-  endTime: bigint,
-  startTime: bigint,
+  durationNS: bigint | number,
   filebytes: number,
 ) {
-  const elapsedMS = Number(endTime - startTime) / 1e6;
+  const elapsedMS = Number(durationNS) / 1e6;
   const seconds = elapsedMS / 1_000;
   const fileMB = filebytes / (1_024 * 1_024);
   const throughput = fileMB / seconds;
