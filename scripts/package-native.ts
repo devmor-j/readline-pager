@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   readFileSync,
   rmSync,
@@ -24,17 +25,14 @@ if (!libc && platform === "linux") {
 
 const libcSuffix = platform === "linux" && libc === "musl" ? "-musl" : "";
 
-let version = process.env.npm_package_version;
+const rootPkgPath = join(process.cwd(), "package.json");
+const version =
+  process.env.npm_package_version ||
+  JSON.parse(readFileSync(rootPkgPath, "utf8"))?.version;
+
 if (!version) {
-  try {
-    const pkgRoot = JSON.parse(
-      readFileSync(join(process.cwd(), "package.json"), "utf8"),
-    );
-    version = pkgRoot.version;
-  } catch (err) {
-    console.error("Unable to determine package version:", err);
-    process.exit(1);
-  }
+  console.error("❌ Error: Could not determine version.");
+  process.exit(1);
 }
 
 const outDir = join(process.cwd(), "pkg");
@@ -45,7 +43,14 @@ const jsFilename = "index.js";
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
-cpSync(join("build", "Release", nativeFilename), join(outDir, nativeFilename));
+const sourcePath = join("build", "Release", nativeFilename);
+
+if (!existsSync(sourcePath)) {
+  console.error(`❌ Error: Native binary not found at ${sourcePath}.`);
+  process.exit(1);
+}
+
+cpSync(sourcePath, join(outDir, nativeFilename));
 
 writeFileSync(
   join(outDir, jsFilename),

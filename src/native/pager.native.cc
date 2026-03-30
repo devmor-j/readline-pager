@@ -13,7 +13,6 @@
 #include <mutex>
 #include <node_api.h>
 #include <stop_token>
-#include <string>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <thread>
@@ -21,30 +20,11 @@
 
 #if defined(__x86_64__) || defined(__i386__)
 #include <immintrin.h>
-#endif
-
-#if defined(__aarch64__) || defined(__arm__)
+#elif defined(__aarch64__) || defined(__arm__)
 #include <arm_neon.h>
-#include <asm/hwcap.h>
-#include <sys/auxv.h>
 #endif
 
 static constexpr size_t BLOCK_SIZE = 64 * 1024;
-
-enum class CpuFeature { AVX2, Neon, Unsupported };
-
-static CpuFeature detect_cpu() {
-#if defined(__x86_64__) || defined(__i386__)
-  if (__builtin_cpu_supports("avx2"))
-    return CpuFeature::AVX2;
-#elif defined(__aarch64__)
-  return CpuFeature::Neon;
-#elif defined(__arm__)
-  if (getauxval(AT_HWCAP) & HWCAP_NEON)
-    return CpuFeature::Neon;
-#endif
-  return CpuFeature::Unsupported;
-}
 
 struct Segment {
   size_t start;
@@ -354,9 +334,9 @@ static inline bool backward_consume_delim(PagerState *st, Segment *segments,
 }
 
 #if defined(__x86_64__) || defined(__i386__)
-__attribute__((target("avx2")))
-#endif
-static void scan_forward_avx2(std::stop_token stop, PagerState *st) {
+
+__attribute__((target("avx2,bmi,lzcnt"))) static void
+scan_forward(std::stop_token stop, PagerState *st) {
   const size_t size = st->filesize;
   const char *data = st->data;
   const __m256i needle = _mm256_set1_epi8(static_cast<char>(st->delimiter));
@@ -403,60 +383,8 @@ static void scan_forward_avx2(std::stop_token stop, PagerState *st) {
     forward_finish(st, page_start, size);
 }
 
-static void scan_forward_neon(std::stop_token stop, PagerState *st) {
-#if defined(__aarch64__) || defined(__arm__)
-  const size_t size = st->filesize;
-  const uint8_t *data = reinterpret_cast<const uint8_t *>(st->data);
-  const uint8x16_t needle = vdupq_n_u8(st->delimiter);
-
-  size_t page_start = 0;
-  uint32_t lines = 0;
-
-  size_t block_begin = 0;
-  while (block_begin < size && !stop.stop_requested() &&
-         !st->aborted.load(std::memory_order_acquire)) {
-    const size_t block_end = std::min(size, block_begin + BLOCK_SIZE);
-    size_t i = block_begin;
-
-    for (; i + 16 <= block_end && !stop.stop_requested() &&
-           !st->aborted.load(std::memory_order_acquire);
-         i += 16) {
-      const uint8x16_t chunk = vld1q_u8(data + i);
-      const uint8x16_t cmp = vceqq_u8(chunk, needle);
-      const uint64x2_t lanes = vreinterpretq_u64_u8(cmp);
-
-      if (vgetq_lane_u64(lanes, 0) || vgetq_lane_u64(lanes, 1)) {
-        for (int b = 0; b < 16; ++b) {
-          if (data[i + static_cast<size_t>(b)] == st->delimiter) {
-            if (!forward_consume_delim(st, i + static_cast<size_t>(b),
-                                       page_start, lines))
-              return;
-          }
-        }
-      }
-    }
-
-    for (; i < block_end && !stop.stop_requested() &&
-           !st->aborted.load(std::memory_order_acquire);
-         ++i) {
-      if (data[i] == static_cast<char>(st->delimiter)) {
-        if (!forward_consume_delim(st, i, page_start, lines))
-          return;
-      }
-    }
-
-    block_begin = block_end;
-  }
-
-  if (!st->aborted.load(std::memory_order_acquire))
-    forward_finish(st, page_start, size);
-#endif
-}
-
-#if defined(__x86_64__) || defined(__i386__)
-__attribute__((target("avx2")))
-#endif
-static void scan_backward_avx2(std::stop_token stop, PagerState *st) {
+__attribute__((target("avx2,bmi,lzcnt"))) static void
+scan_backward(std::stop_token stop, PagerState *st) {
   const size_t size = st->filesize;
   const char *data = st->data;
   const __m256i needle = _mm256_set1_epi8(static_cast<char>(st->delimiter));
@@ -533,8 +461,57 @@ done:
   free(segments);
 }
 
-static void scan_backward_neon(std::stop_token stop, PagerState *st) {
-#if defined(__aarch64__) || defined(__arm__)
+#elif defined(__aarch64__) || defined(__arm__)
+
+static void scan_forward(std::stop_token stop, PagerState *st) {
+  const size_t size = st->filesize;
+  const uint8_t *data = reinterpret_cast<const uint8_t *>(st->data);
+  const uint8x16_t needle = vdupq_n_u8(st->delimiter);
+
+  size_t page_start = 0;
+  uint32_t lines = 0;
+
+  size_t block_begin = 0;
+  while (block_begin < size && !stop.stop_requested() &&
+         !st->aborted.load(std::memory_order_acquire)) {
+    const size_t block_end = std::min(size, block_begin + BLOCK_SIZE);
+    size_t i = block_begin;
+
+    for (; i + 16 <= block_end && !stop.stop_requested() &&
+           !st->aborted.load(std::memory_order_acquire);
+         i += 16) {
+      const uint8x16_t chunk = vld1q_u8(data + i);
+      const uint8x16_t cmp = vceqq_u8(chunk, needle);
+      const uint64x2_t lanes = vreinterpretq_u64_u8(cmp);
+
+      if (vgetq_lane_u64(lanes, 0) || vgetq_lane_u64(lanes, 1)) {
+        for (int b = 0; b < 16; ++b) {
+          if (data[i + static_cast<size_t>(b)] == st->delimiter) {
+            if (!forward_consume_delim(st, i + static_cast<size_t>(b),
+                                       page_start, lines))
+              return;
+          }
+        }
+      }
+    }
+
+    for (; i < block_end && !stop.stop_requested() &&
+           !st->aborted.load(std::memory_order_acquire);
+         ++i) {
+      if (data[i] == static_cast<char>(st->delimiter)) {
+        if (!forward_consume_delim(st, i, page_start, lines))
+          return;
+      }
+    }
+
+    block_begin = block_end;
+  }
+
+  if (!st->aborted.load(std::memory_order_acquire))
+    forward_finish(st, page_start, size);
+}
+
+static void scan_backward(std::stop_token stop, PagerState *st) {
   const size_t size = st->filesize;
   const uint8_t *data = reinterpret_cast<const uint8_t *>(st->data);
   const uint8x16_t needle = vdupq_n_u8(st->delimiter);
@@ -607,12 +584,16 @@ static void scan_backward_neon(std::stop_token stop, PagerState *st) {
 
 done:
   free(segments);
-#endif
 }
 
-static void background_scanner(std::stop_token stop, PagerState *st) {
-  const CpuFeature feature = detect_cpu();
+#else
 
+static void scan_forward(std::stop_token stop, PagerState *st) {}
+static void scan_backward(std::stop_token stop, PagerState *st) {}
+
+#endif
+
+static void background_scanner(std::stop_token stop, PagerState *st) {
   if (st->filesize == 0) {
     if (!st->aborted.load(std::memory_order_acquire)) {
       PageItem item{nullptr, 0, false};
@@ -623,21 +604,10 @@ static void background_scanner(std::stop_token stop, PagerState *st) {
     return;
   }
 
-  if (feature == CpuFeature::AVX2) {
-    if (st->backward)
-      scan_backward_avx2(stop, st);
-    else
-      scan_forward_avx2(stop, st);
-  } else if (feature == CpuFeature::Neon) {
-    if (st->backward)
-      scan_backward_neon(stop, st);
-    else
-      scan_forward_neon(stop, st);
-  } else {
-    st->scan_finished.store(true, std::memory_order_release);
-    st->cv.notify_all();
-    return;
-  }
+  if (st->backward)
+    scan_backward(stop, st);
+  else
+    scan_forward(stop, st);
 
   st->scan_finished.store(true, std::memory_order_release);
   st->cv.notify_all();

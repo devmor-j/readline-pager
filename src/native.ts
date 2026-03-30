@@ -10,9 +10,9 @@ function isMusl(): boolean {
   try {
     const report = process.report?.getReport?.() as any;
     return !report?.header?.glibcVersionRuntime;
-  } catch {
-    return false;
-  }
+  } catch {}
+
+  return false;
 }
 
 function getPackageName(): string {
@@ -20,10 +20,6 @@ function getPackageName(): string {
   const a = arch();
 
   switch (p) {
-    case "darwin":
-    case "win32": {
-      return `@devmor-j/readline-pager-${p}-${a}`;
-    }
     case "linux": {
       const libc = isMusl() ? "musl-" : "";
       return `@devmor-j/readline-pager-${p}-${libc}${a}`;
@@ -40,62 +36,63 @@ function loadNativeAddon(): NativeAddon {
   } catch {
     const p = platform();
     const a = arch();
-    const UNAVAILABLE = `Native addon not available for ${p}/${a}.`;
-    throw new Error(UNAVAILABLE);
+    throw new Error(`Native addon not available for ${p}/${a}.`);
   }
 }
 
 export function createNativePager(
   filepath: string,
-  options?: Partial<NativeReaderOptions>,
+  options: Partial<NativeReaderOptions> = {},
 ): Pager {
-  const {
-    pageSize = 1_000,
-    delimiter = "\n",
-    backward = false,
-  } = options ?? {};
+  const { pageSize = 1_000, delimiter = "\n", backward = false } = options;
 
   if (!filepath) throw new Error("filepath required");
   if (pageSize < 1) throw new RangeError("pageSize must be >= 1");
-  if (delimiter.length !== 1) {
+  if (delimiter?.length > 1) {
     throw new RangeError(
       "native reader only supports single-character delimiters",
     );
   }
 
-  const nativePager = loadNativeAddon();
-  let fd = nativePager.open(filepath, pageSize, delimiter, backward);
+  const nativeReader = loadNativeAddon();
+
+  if (process.env.PAGER_TEST_CLEANUPS) {
+    (globalThis as any).__pager_test_cleanups__ ??= [];
+    (globalThis as any).__pager_test_cleanups__.push(nativeReader.close);
+  }
+
+  let fd = nativeReader.open(filepath, pageSize, delimiter, backward);
   let closed = false;
 
-  const next = async () => {
+  async function next() {
     if (closed || !fd) return null;
 
-    const data = await nativePager.next(fd);
+    const data = await nativeReader.next(fd);
     if (!data) return null;
 
     return data.toString("utf8").split(delimiter);
-  };
+  }
 
-  const nextSync = () => {
+  function nextSync() {
     if (closed || !fd) return null;
 
-    const data = nativePager.nextSync(fd);
+    const data = nativeReader.nextSync(fd);
     if (!data) return null;
 
     return data.toString("utf8").split(delimiter);
-  };
+  }
 
-  const close = async () => {
-    if (closed) return;
+  async function close() {
+    if (closed || !fd) return;
     closed = true;
 
     if (fd) {
       try {
-        await nativePager.close(fd);
+        await nativeReader.close(fd);
       } catch {}
       fd = null;
     }
-  };
+  }
 
   function tryClose() {
     void close().catch(() => {});
