@@ -9,7 +9,7 @@ on:
 jobs:
   publish-native:
     name: Publish ${{ matrix.name }}
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
 
     permissions:
       contents: read
@@ -54,7 +54,7 @@ jobs:
 
   publish-native-musl:
     name: Publish ${{ matrix.name }}
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     container: node:24-alpine
 
     permissions:
