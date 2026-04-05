@@ -334,7 +334,6 @@ static inline bool backward_consume_delim(PagerState *st, Segment *segments,
 }
 
 #if defined(__x86_64__) || defined(__i386__)
-
 __attribute__((target("avx2,bmi,lzcnt"))) static void
 scan_forward(std::stop_token stop, PagerState *st) {
   const size_t size = st->filesize;
@@ -647,6 +646,14 @@ static napi_value Open(napi_env env, napi_callback_info info) {
     return nullptr;
   }
 
+#if defined(POSIX_FADV_SEQUENTIAL)
+  (void)posix_fadvise(fd, 0, 0,
+                      backward ? POSIX_FADV_RANDOM : POSIX_FADV_SEQUENTIAL);
+#endif
+#if defined(POSIX_FADV_WILLNEED)
+  (void)posix_fadvise(fd, 0, 0, POSIX_FADV_WILLNEED);
+#endif
+
   struct stat stbuf{};
   if (fstat(fd, &stbuf) != 0) {
     close(fd);
@@ -665,8 +672,16 @@ static napi_value Open(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-#if defined(MADV_RANDOM) && defined(MADV_SEQUENTIAL)
+#if defined(MADV_WILLNEED)
+    (void)madvise(map, fs, MADV_WILLNEED);
+#endif
+#if defined(MADV_SEQUENTIAL) && defined(MADV_RANDOM)
     (void)madvise(map, fs, backward ? MADV_RANDOM : MADV_SEQUENTIAL);
+#elif defined(MADV_SEQUENTIAL)
+    (void)madvise(map, fs, MADV_SEQUENTIAL);
+#endif
+#if defined(MADV_HUGEPAGE)
+    (void)madvise(map, fs, MADV_HUGEPAGE);
 #endif
   }
 
