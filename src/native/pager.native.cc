@@ -266,8 +266,6 @@ static inline bool build_backward_page_item(PagerState *st,
   size_t total = 0;
   for (size_t i = 0; i < count; ++i) {
     total += segments[i].end - segments[i].start;
-    if (i + 1 < count)
-      ++total;
   }
 
   if (total == 0) {
@@ -284,15 +282,12 @@ static inline bool build_backward_page_item(PagerState *st,
   }
 
   char *dst = buf;
-  for (size_t i = 0; i < count; ++i) {
+  for (size_t i = count; i-- > 0;) {
     const size_t len = segments[i].end - segments[i].start;
     if (len > 0) {
       std::memcpy(dst, st->data + segments[i].start, len);
       dst += len;
     }
-
-    if (i + 1 < count)
-      *dst++ = static_cast<char>(st->delimiter);
   }
 
   out = {buf, total, true};
@@ -322,7 +317,7 @@ static inline bool backward_consume_delim(PagerState *st, Segment *segments,
                                           size_t &segment_end,
                                           size_t delim_pos) {
   segments[segment_count++] = Segment{delim_pos + 1, segment_end};
-  segment_end = delim_pos;
+  segment_end = delim_pos + 1;
 
   if (segment_count >= st->page_lines) {
     if (!flush_backward_page(st, segments, segment_count))
