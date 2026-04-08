@@ -1,9 +1,6 @@
 import { createNativePager } from "./native.js";
-import {
-  createBackwardReader,
-  createForwardReader,
-  createWorkerReader,
-} from "./reader/index.reader.js";
+import { createBackwardReader } from "./reader/backward.reader.js";
+import { createForwardReader } from "./reader/forward.reader.js";
 import type {
   NativeReaderOptions,
   Output,
@@ -32,7 +29,6 @@ export function createPager<T extends Output>(
     delimiter = "\n",
     prefetch = 8,
     backward = false,
-    useWorker = false,
     tryNative = true,
     output = "array",
   } = options;
@@ -40,11 +36,6 @@ export function createPager<T extends Output>(
   if (!filepath) throw new Error("filepath required");
   if (pageSize < 1) throw new RangeError("pageSize must be >= 1");
   if (prefetch < 1) throw new RangeError("prefetch must be >= 1");
-
-  if (useWorker) {
-    if (backward) throw new Error("backward not supported with useWorker");
-    if (tryNative) throw new Error("tryNative not supported with useWorker");
-  }
 
   if (tryNative) {
     if (delimiter.length !== 1) {
@@ -80,11 +71,9 @@ export function createPager<T extends Output>(
   const reader =
     tryNative && nativeReader
       ? nativeReader
-      : useWorker
-        ? createWorkerReader(filepath, readerOptions)
-        : backward
-          ? createBackwardReader(filepath, readerOptions)
-          : createForwardReader(filepath, readerOptions);
+      : backward
+        ? createBackwardReader(filepath, readerOptions)
+        : createForwardReader(filepath, readerOptions);
 
   if (process.env.PAGER_TEST_CLEANUPS) {
     (globalThis as any).__pager_test_cleanups__ ??= [];

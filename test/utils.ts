@@ -101,7 +101,6 @@ export interface BenchmarkArgs {
   "page-size"?: number;
   backward?: boolean;
   prefetch?: number;
-  "use-worker"?: boolean;
 }
 
 /** Parse CLI args supporting --arg=val and --arg val */
@@ -152,8 +151,7 @@ export function parseProcessArgv(): BenchmarkArgs {
         break;
       }
 
-      case "backward":
-      case "use-worker": {
+      case "backward": {
         setArg(key, value === undefined ? true : value === "true");
         break;
       }

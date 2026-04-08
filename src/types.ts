@@ -25,22 +25,8 @@ export interface NativeReaderOptions {
 
 export type PagerOptions = Partial<ReaderOptions> & {
   backward?: boolean;
-  useWorker?: boolean;
   tryNative?: boolean;
 };
-
-export type WorkerMessage =
-  | {
-      type: "page";
-      data: PageOutput;
-    }
-  | {
-      type: "error";
-      error: unknown;
-    }
-  | {
-      type: "done";
-    };
 
 type AddonFD = object | null;
 type AddonData = Buffer | null;

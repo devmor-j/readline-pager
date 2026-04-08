@@ -22,24 +22,6 @@ suite("validation", () => {
     });
   });
 
-  test("createPager throws when backward and useWorker both true", () => {
-    assert.throws(
-      () => createPager("x", { backward: true, useWorker: true }),
-      /backward not supported with useWorker/,
-    );
-  });
-
-  test("it throws when used with native reading", () => {
-    assert.throws(
-      () =>
-        createPager("x", {
-          useWorker: true,
-          tryNative: true,
-        }),
-      /tryNative not supported/,
-    );
-  });
-
   test("createPager throws on invalid numeric args", () => {
     assert.throws(
       () => createPager("x", { pageSize: 0 }),
@@ -314,14 +296,13 @@ suite("api", () => {
     }
   });
 
-  test("close() stops worker and prevents further pages", async () => {
+  test("close() stops and prevents further pages", async () => {
     const content = createTextLines(10_000);
     const filepath = await createTmpFile(content);
 
     try {
       const pager = createPager(filepath, {
         pageSize: 1_000,
-        useWorker: true,
         tryNative: false,
       });
 
@@ -333,77 +314,6 @@ suite("api", () => {
 
       const afterClose = await pager.next();
       assert.equal(afterClose, null);
-    } finally {
-      await tryDeleteFile(filepath);
-    }
-  });
-
-  test("worker nextSync returns pages if available", async () => {
-    const content = createTextLines(20);
-    const filepath = await createTmpFile(content);
-
-    try {
-      const pager = createPager(filepath, {
-        useWorker: true,
-        tryNative: false,
-        pageSize: 5,
-      });
-
-      // allow worker to prefill queue
-      await new Promise((r) => setTimeout(r, 10));
-
-      const page = pager.nextSync();
-
-      assert.ok(page === null || Array.isArray(page));
-    } finally {
-      await tryDeleteFile(filepath);
-    }
-  });
-
-  test("worker finishes immediately (tiny file) and iterator still closes cleanly", async () => {
-    const filepath = await createTmpFile("x", {});
-
-    try {
-      const pager = createPager(filepath, {
-        useWorker: true,
-        tryNative: false,
-        pageSize: 10,
-        prefetch: 1,
-      });
-
-      const out: string[] = [];
-      for await (const page of pager) {
-        out.push(...page);
-      }
-
-      assert.equal(out.length, 1);
-
-      const after = await pager.next();
-      assert.equal(after, null);
-    } finally {
-      await tryDeleteFile(filepath);
-    }
-  });
-
-  test("worker sync iterator break closes file", async () => {
-    const content = createTextLines(200);
-    const filepath = await createTmpFile(content);
-
-    try {
-      const pager = createPager(filepath, {
-        useWorker: true,
-        tryNative: false,
-        pageSize: 10,
-        prefetch: 2,
-      });
-
-      for (const page of pager) {
-        assert.deepEqual(page, null);
-        break;
-      }
-
-      const page = await pager.next();
-      assert.deepEqual(page, null);
     } finally {
       await tryDeleteFile(filepath);
     }

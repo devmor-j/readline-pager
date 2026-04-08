@@ -157,7 +157,6 @@ async function runReadlinePager(
   if (args["chunk-size"]) options.chunkSize = args["chunk-size"];
   if (args.backward) options.backward = args.backward;
   if (args.prefetch) options.prefetch = args.prefetch;
-  if (args["use-worker"]) options.useWorker = args["use-worker"];
 
   const pager = createPager(filepath, options);
 

@@ -84,7 +84,6 @@ createPager(filepath, {
   delimiter?: string,   // default: "\n"
   prefetch?: number,    // default: 8
   backward?: boolean,   // default: false
-  useWorker?: boolean,  // default: false
   tryNative?: boolean,  // default: true
 });
 
@@ -100,7 +99,6 @@ createNativePager(filepath, {
 - `delimiter` — line separator.
 - `prefetch` — maximum number of pages buffered internally.
 - `backward` — read the file from end to start.
-- `useWorker` — offload reading to a worker thread (forward reading only).
 - `tryNative` — attempts to use the native reader, falls back to the non-native version if it fails.
 
 > **Note:**
@@ -181,3 +179,7 @@ Contributions are welcome. Open an issue or submit a PR.
 ## 📜 License
 
 MIT — © Morteza Jamshidi
+
+## TODO
+
+- remove `tryNative` as user can simply fallback to pure reader if createNativePager throws
