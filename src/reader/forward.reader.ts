@@ -2,15 +2,18 @@ import { closeSync, openSync, readSync, statSync } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import { open } from "node:fs/promises";
 import { createRingBuffer } from "../helper.js";
-import type { Pager, ReaderOptions } from "../types.js";
+import type { Output, PageOutput, Pager, ReaderOptions } from "../types.js";
 
-export function createForwardReader(
+export function createForwardReader<T extends Output>(
   filepath: string,
-  options: ReaderOptions,
+  options: ReaderOptions & { output: T },
 ): Pager {
-  const { chunkSize, pageSize, delimiter, prefetch } = options;
+  const { chunkSize, pageSize, delimiter, prefetch, output } = options;
 
-  const pageQueue = createRingBuffer<string[]>(Math.max(2, prefetch + 1));
+  const pageQueue = createRingBuffer<PageOutput>(Math.max(2, prefetch + 1));
+
+  const isBufferOutput = output === "buffer";
+  const emptyPage = isBufferOutput ? Buffer.allocUnsafe(0) : [""];
   const local: string[] = [];
 
   let fd: FileHandle | null = null;
@@ -41,11 +44,13 @@ export function createForwardReader(
     if (flushed) return;
     flushed = true;
 
-    local.push(buffer.length > 0 ? buffer : "");
-    buffer = "";
+    if (!isBufferOutput) {
+      local.push(buffer.length > 0 ? buffer : "");
+      buffer = "";
 
-    while (local.length > 0) {
-      pageQueue.push(local.splice(0, pageSize));
+      while (local.length > 0) {
+        pageQueue.push(local.splice(0, pageSize));
+      }
     }
 
     done = true;
@@ -56,7 +61,7 @@ export function createForwardReader(
   size = statSync(filepath).size;
 
   if (size === 0) {
-    pageQueue.push([""]);
+    pageQueue.push(emptyPage);
     done = true;
     flushed = true;
     pageQueue.wake();
@@ -68,7 +73,7 @@ export function createForwardReader(
 
     if (size === 0) {
       if (!done) {
-        pageQueue.push([""]);
+        pageQueue.push(emptyPage);
         done = true;
         flushed = true;
       }
@@ -91,8 +96,12 @@ export function createForwardReader(
         const { bytesRead } = await fd.read(buf, 0, readSize, pos);
         pos += bytesRead;
 
-        buffer = buffer + buf.toString("utf8", 0, bytesRead);
-        consumeBuffer();
+        if (isBufferOutput) {
+          pageQueue.push(buf.subarray(0, bytesRead));
+        } else {
+          buffer = buffer + buf.toString("utf8", 0, bytesRead);
+          consumeBuffer();
+        }
       }
 
       if (pos >= size && !flushed) {
@@ -123,8 +132,12 @@ export function createForwardReader(
       const bytesRead = readSync(fdSync, buf, 0, readSize, pos);
       pos += bytesRead;
 
-      buffer = buffer + buf.toString("utf8", 0, bytesRead);
-      consumeBuffer();
+      if (isBufferOutput) {
+        pageQueue.push(buf.subarray(0, bytesRead));
+      } else {
+        buffer = buffer + buf.toString("utf8", 0, bytesRead);
+        consumeBuffer();
+      }
     }
 
     if (pos >= size && !flushed) {
@@ -213,5 +226,5 @@ export function createForwardReader(
         }
       }
     },
-  };
+  } as Pager;
 }

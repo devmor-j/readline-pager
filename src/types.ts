@@ -1,26 +1,38 @@
+export type AsyncFunction = () => Promise<void>;
+
+export type Output = "array" | "buffer";
+
+export type PageOutput = string[] | Buffer;
+
+export type ResolvePageOutput<T extends Output> = T extends "buffer"
+  ? Buffer
+  : string[];
+
 export interface ReaderOptions {
   chunkSize: number;
   pageSize: number;
   delimiter: string;
   prefetch: number;
-}
-
-export interface PagerOptions extends Partial<ReaderOptions> {
-  backward?: boolean;
-  useWorker?: boolean;
-  tryNative?: boolean;
+  output: Output;
 }
 
 export interface NativeReaderOptions {
   pageSize: number;
   delimiter: string;
   backward: boolean;
+  output: Output;
 }
+
+export type PagerOptions = Partial<ReaderOptions> & {
+  backward?: boolean;
+  useWorker?: boolean;
+  tryNative?: boolean;
+};
 
 export type WorkerMessage =
   | {
       type: "page";
-      data: string[];
+      data: PageOutput;
     }
   | {
       type: "error";
@@ -45,10 +57,10 @@ export interface NativeAddon {
   close: (fd: AddonFD) => Promise<void>;
 }
 
-export interface Pager {
-  next(): Promise<string[] | null>;
-  nextSync(): string[] | null;
+export interface Pager<T extends Output = "array"> {
+  next(): Promise<ResolvePageOutput<T> | null>;
+  nextSync(): ResolvePageOutput<T> | null;
   close(): Promise<void>;
-  [Symbol.asyncIterator](): AsyncIterator<string[]>;
-  [Symbol.iterator](): Iterator<string[]>;
+  [Symbol.asyncIterator](): AsyncIterator<ResolvePageOutput<T>>;
+  [Symbol.iterator](): Iterator<ResolvePageOutput<T>>;
 }

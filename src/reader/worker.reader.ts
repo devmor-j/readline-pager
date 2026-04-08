@@ -1,6 +1,12 @@
 import { Worker } from "node:worker_threads";
 import { createRingBuffer } from "../helper.js";
-import type { Pager, ReaderOptions, WorkerMessage } from "../types.js";
+import type {
+  Output,
+  PageOutput,
+  Pager,
+  ReaderOptions,
+  WorkerMessage,
+} from "../types.js";
 
 // TODO: refactor with better technique
 const isESM = typeof import.meta !== "undefined";
@@ -9,16 +15,16 @@ const workerFile = isESM
   ? new URL("./worker.mjs", import.meta.url)
   : require.resolve("./worker.cjs");
 
-export function createWorkerReader(
+export function createWorkerReader<T extends Output>(
   filepath: string,
-  options: ReaderOptions,
+  options: ReaderOptions & { output: T },
 ): Pager {
   const { prefetch } = options;
 
   let done = false;
   let closed = false;
 
-  const pageQueue = createRingBuffer<string[]>(Math.max(2, prefetch + 1));
+  const pageQueue = createRingBuffer<PageOutput>(Math.max(2, prefetch + 1));
 
   const worker = new Worker(new URL(workerFile, import.meta.url), {
     workerData: {
@@ -103,5 +109,5 @@ export function createWorkerReader(
         tryClose();
       }
     },
-  };
+  } as Pager;
 }

@@ -2,15 +2,18 @@ import { closeSync, openSync, readSync, statSync } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import { open } from "node:fs/promises";
 import { createRingBuffer } from "../helper.js";
-import type { Pager, ReaderOptions } from "../types.js";
+import type { Output, PageOutput, Pager, ReaderOptions } from "../types.js";
 
-export function createBackwardReader(
+export function createBackwardReader<T extends Output>(
   filepath: string,
-  options: ReaderOptions,
+  options: ReaderOptions & { output: T },
 ): Pager {
-  const { chunkSize, pageSize, delimiter, prefetch } = options;
+  const { chunkSize, pageSize, delimiter, prefetch, output } = options;
 
-  const pageQueue = createRingBuffer<string[]>(Math.max(2, prefetch + 1));
+  const pageQueue = createRingBuffer<PageOutput>(Math.max(2, prefetch + 1));
+
+  const isBufferOutput = output === "buffer";
+  const emptyPage = isBufferOutput ? Buffer.allocUnsafe(0) : [""];
   const local: string[] = [];
 
   let fd: FileHandle | null = null;
@@ -41,18 +44,22 @@ export function createBackwardReader(
     if (flushed) return;
     flushed = true;
 
-    if (buffer.length > 0) {
-      local.push(buffer);
-    } else if (startsWithDelimiter) {
-      local.push("");
-    }
+    if (!isBufferOutput) {
+      if (buffer.length > 0) {
+        local.push(buffer);
+      } else if (startsWithDelimiter) {
+        local.push("");
+      }
 
-    buffer = "";
+      buffer = "";
 
-    while (local.length > 0) {
-      const page = local.slice(local.length - Math.min(pageSize, local.length));
-      local.length -= page.length;
-      pageQueue.push(page);
+      while (local.length > 0) {
+        const page = local.slice(
+          local.length - Math.min(pageSize, local.length),
+        );
+        local.length -= page.length;
+        pageQueue.push(page);
+      }
     }
 
     done = true;
@@ -63,7 +70,7 @@ export function createBackwardReader(
   pos = statSync(filepath).size;
 
   if (pos === 0) {
-    pageQueue.push([""]);
+    pageQueue.push(emptyPage);
     done = true;
     flushed = true;
     pageQueue.wake();
@@ -75,7 +82,7 @@ export function createBackwardReader(
 
     if (pos === 0) {
       if (!done) {
-        pageQueue.push([""]);
+        pageQueue.push(emptyPage);
         done = true;
         flushed = true;
       }
@@ -99,13 +106,17 @@ export function createBackwardReader(
         const buf = Buffer.allocUnsafe(readSize);
         const { bytesRead } = await fd.read(buf, 0, readSize, pos);
 
-        buffer = buf.toString("utf8", 0, bytesRead) + buffer;
+        if (isBufferOutput) {
+          pageQueue.push(buf.subarray(0, bytesRead));
+        } else {
+          buffer = buf.toString("utf8", 0, bytesRead) + buffer;
 
-        if (pos === 0 && buffer.startsWith(delimiter)) {
-          startsWithDelimiter = true;
+          if (pos === 0 && buffer.startsWith(delimiter)) {
+            startsWithDelimiter = true;
+          }
+
+          consumeBuffer();
         }
-
-        consumeBuffer();
       }
 
       if (pos === 0 && !flushed) {
@@ -137,13 +148,17 @@ export function createBackwardReader(
       const buf = Buffer.allocUnsafe(readSize);
       const bytesRead = readSync(fdSync, buf, 0, readSize, pos);
 
-      buffer = buf.toString("utf8", 0, bytesRead) + buffer;
+      if (isBufferOutput) {
+        pageQueue.push(buf.subarray(0, bytesRead));
+      } else {
+        buffer = buf.toString("utf8", 0, bytesRead) + buffer;
 
-      if (pos === 0 && buffer.startsWith(delimiter)) {
-        startsWithDelimiter = true;
+        if (pos === 0 && buffer.startsWith(delimiter)) {
+          startsWithDelimiter = true;
+        }
+
+        consumeBuffer();
       }
-
-      consumeBuffer();
     }
 
     if (pos === 0 && !flushed) {
@@ -232,5 +247,5 @@ export function createBackwardReader(
         }
       }
     },
-  };
+  } as Pager;
 }

@@ -3,9 +3,10 @@ import { parentPort, workerData } from "node:worker_threads";
 import type { ReaderOptions, WorkerMessage } from "./types.js";
 
 const { filepath, options } = workerData;
-const { chunkSize, pageSize, delimiter } = options as ReaderOptions;
+const { chunkSize, pageSize, delimiter, output } = options as ReaderOptions;
 
 const backpressure = pageSize * 8;
+const isBufferOutput = output === "buffer";
 
 function post(msg: WorkerMessage) {
   if (!parentPort) process.exit(1);
@@ -27,30 +28,36 @@ void (async () => {
       const { bytesRead } = await fd.read(buf, 0, readSize, pos);
       pos += bytesRead;
 
-      buffer = buffer + buf.toString("utf8", 0, bytesRead);
+      if (isBufferOutput) {
+        post({ type: "page", data: buf.subarray(0, bytesRead) });
+      } else {
+        buffer = buffer + buf.toString("utf8", 0, bytesRead);
 
-      let idx: number;
-      while ((idx = buffer.indexOf(delimiter)) !== -1) {
-        const line = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + delimiter.length);
-        local.push(line);
+        let idx: number;
+        while ((idx = buffer.indexOf(delimiter)) !== -1) {
+          const line = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + delimiter.length);
+          local.push(line);
 
-        if (local.length >= pageSize) {
-          const page = local.splice(0, pageSize);
-          post({ type: "page", data: page });
+          if (local.length >= pageSize) {
+            const page = local.splice(0, pageSize);
+            post({ type: "page", data: page });
 
-          if (local.length > backpressure) {
-            await new Promise((r) => setImmediate(r));
+            if (local.length > backpressure) {
+              await new Promise((r) => setImmediate(r));
+            }
           }
         }
       }
     }
 
-    local.push(buffer);
+    if (!isBufferOutput) {
+      local.push(buffer);
 
-    while (local.length > 0) {
-      const page = local.splice(0, pageSize);
-      post({ type: "page", data: page });
+      while (local.length > 0) {
+        const page = local.splice(0, pageSize);
+        post({ type: "page", data: page });
+      }
     }
 
     post({ type: "done" });

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { AsyncFunction } from "../src/types.ts";
 
 const TMP_DIR = "./tmp/test";
 
@@ -87,23 +88,10 @@ export async function createBigTmpFile(
 }
 
 export async function runTestCleanup() {
-  const cleanups: Function[] = (globalThis as any).__pager_test_cleanups__;
+  const cleanups: AsyncFunction[] = (globalThis as any).__pager_test_cleanups__;
 
   if (cleanups?.length) {
-    let failedCount = 0;
-
-    for (const cleanup of cleanups) {
-      try {
-        await cleanup();
-      } catch (err) {
-        failedCount++;
-        console.error(err);
-      }
-    }
-
-    if (failedCount > 0) {
-      console.log(`[41mFailed cleanups: ${failedCount}[0m`);
-    }
+    await Promise.allSettled(cleanups);
   }
 }
 

@@ -408,6 +408,46 @@ suite("api", () => {
       await tryDeleteFile(filepath);
     }
   });
+
+  test("buffer output emits raw chunks and maintains data integrity", async () => {
+    const content = createTextLines(3);
+    const originalBuffer = Buffer.from(content, "utf8");
+    const filepath = await createTmpFile(content);
+
+    try {
+      const forwardPager = createPager(filepath, {
+        output: "buffer",
+        tryNative: false,
+        pageSize: 1,
+      });
+
+      const forwardChunks: Buffer[] = [];
+      for await (const chunk of forwardPager) {
+        assert.ok(Buffer.isBuffer(chunk));
+        forwardChunks.push(chunk);
+      }
+
+      const reconstructedForward = Buffer.concat(forwardChunks);
+      assert.deepEqual(reconstructedForward, originalBuffer);
+
+      const backwardPager = createNativePager(filepath, {
+        output: "buffer",
+        backward: true,
+        pageSize: 1,
+      });
+
+      const backwardChunks: Buffer[] = [];
+      for (const chunk of backwardPager) {
+        assert.ok(Buffer.isBuffer(chunk));
+        backwardChunks.push(chunk);
+      }
+
+      const reconstructedBackward = Buffer.concat(backwardChunks.toReversed());
+      assert.deepEqual(reconstructedBackward, originalBuffer);
+    } finally {
+      await tryDeleteFile(filepath);
+    }
+  });
 });
 
 suite("stress", () => {

@@ -6,14 +6,25 @@ import {
 } from "./reader/index.reader.js";
 import type {
   NativeReaderOptions,
+  Output,
   Pager,
   PagerOptions,
   ReaderOptions,
 } from "./types.js";
 
+export function createPager<T extends Output>(
+  filepath: string,
+  options: PagerOptions & { output: T },
+): Pager<T>;
+
 export function createPager(
   filepath: string,
-  options: PagerOptions = {},
+  options: PagerOptions,
+): Pager<"array">;
+
+export function createPager<T extends Output>(
+  filepath: string,
+  options: PagerOptions & { output?: T } = {},
 ): Pager {
   const {
     chunkSize = 64 * 1_024,
@@ -23,6 +34,7 @@ export function createPager(
     backward = false,
     useWorker = false,
     tryNative = true,
+    output = "array",
   } = options;
 
   if (!filepath) throw new Error("filepath required");
@@ -47,6 +59,7 @@ export function createPager(
     pageSize,
     prefetch,
     delimiter,
+    output,
   };
 
   let nativeReader: Pager | undefined;
@@ -56,6 +69,7 @@ export function createPager(
       pageSize,
       delimiter,
       backward,
+      output,
     };
 
     try {
@@ -80,6 +94,6 @@ export function createPager(
   return reader;
 }
 
-export default createPager;
 export type * from "./types.js";
 export { createNativePager };
+export default createPager;
