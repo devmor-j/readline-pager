@@ -263,14 +263,27 @@ static inline void forward_finish(PagerState *st, size_t page_start,
 static inline bool build_backward_page_item(PagerState *st,
                                             const Segment *segments,
                                             size_t count, PageItem &out) {
-  size_t total = 0;
-  for (size_t i = 0; i < count; ++i) {
-    total += segments[i].end - segments[i].start;
-  }
-
-  if (total == 0) {
+  if (count == 0) {
     out = {nullptr, 0, false};
     return true;
+  }
+
+  size_t total = 0;
+  bool single_nonempty_needs_delim = false;
+
+  for (size_t i = 0; i < count; ++i) {
+    const size_t len = segments[i].end - segments[i].start;
+    total += len;
+  }
+
+  if (count > 1) {
+    total += count - 1;
+  } else {
+    const size_t len = segments[0].end - segments[0].start;
+    if (len > 0 && segments[0].end < st->filesize) {
+      ++total;
+      single_nonempty_needs_delim = true;
+    }
   }
 
   char *buf = static_cast<char *>(malloc(total));
@@ -281,13 +294,23 @@ static inline bool build_backward_page_item(PagerState *st,
     return false;
   }
 
-  char *dst = buf;
-  for (size_t i = count; i-- > 0;) {
-    const size_t len = segments[i].end - segments[i].start;
+  size_t off = 0;
+  for (size_t i = 0; i < count; ++i) {
+    const Segment &seg = segments[i];
+    const size_t len = seg.end - seg.start;
+
     if (len > 0) {
-      std::memcpy(dst, st->data + segments[i].start, len);
-      dst += len;
+      std::memcpy(buf + off, st->data + seg.start, len);
+      off += len;
     }
+
+    if (i + 1 < count) {
+      buf[off++] = static_cast<char>(st->delimiter);
+    }
+  }
+
+  if (single_nonempty_needs_delim) {
+    buf[off++] = static_cast<char>(st->delimiter);
   }
 
   out = {buf, total, true};
@@ -317,7 +340,7 @@ static inline bool backward_consume_delim(PagerState *st, Segment *segments,
                                           size_t &segment_end,
                                           size_t delim_pos) {
   segments[segment_count++] = Segment{delim_pos + 1, segment_end};
-  segment_end = delim_pos + 1;
+  segment_end = delim_pos;
 
   if (segment_count >= st->page_lines) {
     if (!flush_backward_page(st, segments, segment_count))
