@@ -68,6 +68,7 @@ export function createNativePager<T extends Output>(
 
   if (!filepath) throw new Error("filepath required");
   if (pageSize < 1) throw new RangeError("pageSize must be >= 1");
+
   if (delimiter?.length > 1) {
     throw new RangeError(
       "native reader only supports single-character delimiters",

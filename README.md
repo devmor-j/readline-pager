@@ -84,7 +84,6 @@ createPager(filepath, {
   delimiter?: string,   // default: "\n"
   prefetch?: number,    // default: 8
   backward?: boolean,   // default: false
-  tryNative?: boolean,  // default: true
 });
 
 createNativePager(filepath, {
@@ -99,7 +98,6 @@ createNativePager(filepath, {
 - `delimiter` — line separator.
 - `prefetch` — maximum number of pages buffered internally.
 - `backward` — read the file from end to start.
-- `tryNative` — attempts to use the native reader, falls back to the non-native version if it fails.
 
 > **Note:**
 > `createNativePager` requires x86 AVX2 or ARM NEON CPU instruction set extensions and will throw if they are not available. It also does **not** support multi-character delimiters due to fast SIMD-based scanning.
@@ -179,7 +177,3 @@ Contributions are welcome. Open an issue or submit a PR.
 ## 📜 License
 
 MIT — © Morteza Jamshidi
-
-## TODO
-
-- remove `tryNative` as user can simply fallback to pure reader if createNativePager throws

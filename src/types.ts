@@ -25,7 +25,6 @@ export interface NativeReaderOptions {
 
 export type PagerOptions = Partial<ReaderOptions> & {
   backward?: boolean;
-  tryNative?: boolean;
 };
 
 type AddonFD = object | null;
