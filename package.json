@@ -1,6 +1,6 @@
 {
   "name": "readline-pager",
-  "version": "0.6.5",
+  "version": "0.7.0",
   "scripts": {
     "build:js": "tsdown",
     "build:native": "node-gyp rebuild",
@@ -23,10 +23,10 @@
     "typescript": "~6.0.2"
   },
   "optionalDependencies": {
-    "@devmor-j/readline-pager-linux-arm64": "0.6.5",
-    "@devmor-j/readline-pager-linux-musl-arm64": "0.6.5",
-    "@devmor-j/readline-pager-linux-musl-x64": "0.6.5",
-    "@devmor-j/readline-pager-linux-x64": "0.6.5"
+    "@devmor-j/readline-pager-linux-arm64": "0.7.0",
+    "@devmor-j/readline-pager-linux-musl-arm64": "0.7.0",
+    "@devmor-j/readline-pager-linux-musl-x64": "0.7.0",
+    "@devmor-j/readline-pager-linux-x64": "0.7.0"
   },
   "gypfile": false,
   "type": "module",
@@ -60,7 +60,7 @@
     "avx2",
     "neon"
   ],
-  "description": "High-performance paginated file reader for Node.js. Efficiently process large text files without loading them into memory.",
+  "description": "High-performance paginated file reader for Node.js. Process large text files efficiently without loading them into memory.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/devmor-j/readline-pager.git"
