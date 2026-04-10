@@ -13,31 +13,13 @@ import {
 after(runTestCleanup);
 
 suite("validation", () => {
-  test("it throws if filepath is missing", () => {
+  test("it throws if filepath is empty", () => {
     assert.throws(() => {
       createPager("");
     });
     assert.throws(() => {
       createNativePager("");
     });
-  });
-
-  test("createPager throws when backward and useWorker both true", () => {
-    assert.throws(
-      () => createPager("x", { backward: true, useWorker: true }),
-      /backward not supported with useWorker/,
-    );
-  });
-
-  test("it throws when used with native reading", () => {
-    assert.throws(
-      () =>
-        createPager("x", {
-          useWorker: true,
-          tryNative: true,
-        }),
-      /tryNative not supported/,
-    );
   });
 
   test("createPager throws on invalid numeric args", () => {
@@ -73,7 +55,7 @@ suite("files", () => {
     const filepath = await createTmpFile(content);
 
     try {
-      const pager = createPager(filepath, { tryNative: false });
+      const pager = createPager(filepath);
 
       const firstPage = await pager.next();
       assert.deepEqual(firstPage, [""]);
@@ -93,7 +75,7 @@ suite("files", () => {
     const filepath = await createTmpFile(content);
 
     try {
-      const pager = createPager(filepath, { tryNative: false });
+      const pager = createNativePager(filepath);
 
       const lines: string[] = [];
 
@@ -116,7 +98,7 @@ suite("files", () => {
     const filepath = await createTmpFile(content);
 
     try {
-      const pager = createPager(filepath, {
+      const pager = createNativePager(filepath, {
         pageSize: 1,
       });
 
@@ -142,7 +124,7 @@ suite("api", () => {
     const filepath = await createTmpFile(content);
 
     try {
-      const pager = createPager(filepath);
+      const pager = createNativePager(filepath);
 
       for (const page of pager) {
         assert.ok(Array.isArray(page));
@@ -162,7 +144,6 @@ suite("api", () => {
     try {
       const pager1 = createPager(filepath1, {
         backward: true,
-        tryNative: false,
       });
 
       const page = pager1.nextSync();
@@ -197,18 +178,17 @@ suite("api", () => {
       const pager = createPager(filepath, {
         backward: true,
         pageSize: 2,
-        tryNative: false,
       });
 
-      const out: string[] = [];
+      const pages: string[] = [];
 
       for (const page of pager) {
-        out.push(...page);
+        pages.push(...page);
       }
 
       const lines = content.split("\n");
 
-      assert.equal(out.length, lines.length);
+      assert.equal(pages.length, lines.length);
     } finally {
       await tryDeleteFile(filepath);
     }
@@ -224,7 +204,6 @@ suite("api", () => {
         pageSize: 10,
         prefetch: 2,
         chunkSize: 128,
-        tryNative: false,
       });
 
       for (const page of pager) {
@@ -242,39 +221,45 @@ suite("api", () => {
   test("backward async reader handles truncated read (read-failure path)", async () => {
     const content = "a\nb\nc\nd\n";
     const filepath = await createTmpFile(content);
-    const pager = createPager(filepath, {
-      backward: true,
-      pageSize: 1,
-      chunkSize: 1,
-      tryNative: false,
-    });
-
-    await new Promise((r) => setTimeout(r, 5));
-
-    truncateSync(filepath, 0);
-
-    const page = await pager.next();
-
-    assert.ok(page === null || Array.isArray(page));
-
-    await pager.close();
-    await tryDeleteFile(filepath);
-  });
-
-  test("multiple leading delimiters produce multiple empty lines", async () => {
-    const filepath = await createTmpFile("\n\nalpha");
 
     try {
       const pager = createPager(filepath, {
         backward: true,
-        tryNative: false,
+        pageSize: 1,
+        chunkSize: 1,
       });
 
-      const out: string[] = [];
+      await new Promise((r) => setTimeout(r, 5));
 
-      for await (const p of pager) out.push(...p);
+      truncateSync(filepath, 0);
 
-      assert.deepEqual(out, ["alpha", "", ""]);
+      const page = await pager.next();
+
+      assert.ok(page === null || Array.isArray(page));
+
+      await pager.close();
+    } finally {
+      await tryDeleteFile(filepath);
+    }
+  });
+
+  test("multiple leading delimiters produce multiple empty lines", async () => {
+    const content = "\n\nalpha";
+    const filepath = await createTmpFile(content);
+
+    try {
+      const pager = createNativePager(filepath, {
+        backward: true,
+        pageSize: 2,
+      });
+
+      const pages: string[] = [];
+
+      for (const p of pager) {
+        pages.push(...p);
+      }
+
+      assert.deepEqual(pages, content.split("\n").reverse());
     } finally {
       await tryDeleteFile(filepath);
     }
@@ -289,8 +274,8 @@ suite("api", () => {
       const pager = createPager(filepath, {
         pageSize: 3,
         prefetch: 2,
-        tryNative: false,
       });
+
       const pages: string[][] = [];
 
       for (const p of pager) {
@@ -314,15 +299,13 @@ suite("api", () => {
     }
   });
 
-  test("close() stops worker and prevents further pages", async () => {
+  test("close() stops and prevents further pages", async () => {
     const content = createTextLines(10_000);
     const filepath = await createTmpFile(content);
 
     try {
       const pager = createPager(filepath, {
         pageSize: 1_000,
-        useWorker: true,
-        tryNative: false,
       });
 
       const first = await pager.next();
@@ -338,72 +321,40 @@ suite("api", () => {
     }
   });
 
-  test("worker nextSync returns pages if available", async () => {
-    const content = createTextLines(20);
+  test("buffer output emits raw chunks and maintains data integrity", async () => {
+    const content = createTextLines(3);
+    const originalBuffer = Buffer.from(content, "utf8");
     const filepath = await createTmpFile(content);
 
     try {
-      const pager = createPager(filepath, {
-        useWorker: true,
-        tryNative: false,
-        pageSize: 5,
+      const forwardPager = createPager(filepath, {
+        output: "buffer",
+        pageSize: 1,
       });
 
-      // allow worker to prefill queue
-      await new Promise((r) => setTimeout(r, 10));
-
-      const page = pager.nextSync();
-
-      assert.ok(page === null || Array.isArray(page));
-    } finally {
-      await tryDeleteFile(filepath);
-    }
-  });
-
-  test("worker finishes immediately (tiny file) and iterator still closes cleanly", async () => {
-    const filepath = await createTmpFile("x", {});
-
-    try {
-      const pager = createPager(filepath, {
-        useWorker: true,
-        tryNative: false,
-        pageSize: 10,
-        prefetch: 1,
-      });
-
-      const out: string[] = [];
-      for await (const page of pager) {
-        out.push(...page);
+      const forwardChunks: Buffer[] = [];
+      for await (const chunk of forwardPager) {
+        assert.ok(Buffer.isBuffer(chunk));
+        forwardChunks.push(chunk);
       }
 
-      assert.equal(out.length, 1);
+      const reconstructedForward = Buffer.concat(forwardChunks);
+      assert.deepEqual(reconstructedForward, originalBuffer);
 
-      const after = await pager.next();
-      assert.equal(after, null);
-    } finally {
-      await tryDeleteFile(filepath);
-    }
-  });
-
-  test("worker sync iterator break closes file", async () => {
-    const content = createTextLines(200);
-    const filepath = await createTmpFile(content);
-
-    try {
-      const pager = createPager(filepath, {
-        useWorker: true,
-        tryNative: false,
-        pageSize: 10,
-        prefetch: 2,
+      const backwardPager = createNativePager(filepath, {
+        output: "buffer",
+        backward: true,
+        pageSize: 1,
       });
 
-      for (const page of pager) {
-        assert.deepEqual(page, null);
-        break;
+      const backwardChunks: Buffer[] = [];
+      for (const chunk of backwardPager) {
+        assert.ok(Buffer.isBuffer(chunk));
+        backwardChunks.push(chunk);
       }
 
-      const page = await pager.next();
-      assert.deepEqual(page, null);
+      const reconstructedBackward = Buffer.concat(backwardChunks.toReversed());
+      assert.deepEqual(reconstructedBackward, originalBuffer);
     } finally {
       await tryDeleteFile(filepath);
     }
@@ -422,7 +373,6 @@ suite("stress", () => {
         pageSize,
         prefetch: 1,
         chunkSize: 1,
-        tryNative: false,
       });
 
       let pages = 0;
@@ -454,7 +404,6 @@ suite("stress", () => {
         pageSize: 1,
         backward: true,
         prefetch: 400,
-        tryNative: false,
       });
 
       let pages = 0;

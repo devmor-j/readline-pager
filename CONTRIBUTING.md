@@ -24,8 +24,7 @@ Tests run using the built-in Node test runner with coverage enabled.
 ## 📂 Project Structure
 
 - `src/main.ts` — pager factory
-- `src/reader/` — readers engine for forward, backward and worker
-- `src/worker.ts` — worker-thread implementation for forward reading
+- `src/reader/` — readers engine for forward and backward
 - `src/native.ts` — native pager factory
 - `src/native/pager.native.cc` — native reader engine implemented in C++ (forward and backward)
 - `test/` — test files and benchmark tools with some utils only for tests
@@ -37,7 +36,6 @@ Tests run using the built-in Node test runner with coverage enabled.
 - `pageSize` controls how many lines are returned per page.
 - `chunkSize` strongly affects performance and should be tuned per environment.
 - `prefetch` controls internal buffering of pages.
-- Worker mode is **forward-only** and cannot be combined with backward reading.
 - Native mode (`createNativePager`) supports only single-character delimiters and a limited subset of options.
 - The async iterator (`for await...of`) and manual iteration (`next()`) are both supported; manual iteration may provide more control in some cases.
 

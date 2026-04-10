@@ -1,6 +1,11 @@
 import { createRequire } from "node:module";
 import { arch, platform } from "node:os";
-import type { NativeAddon, NativeReaderOptions, Pager } from "./types.js";
+import type {
+  NativeAddon,
+  NativeReaderOptions,
+  Output,
+  Pager,
+} from "./types.js";
 
 const require = createRequire(import.meta.url);
 
@@ -32,7 +37,7 @@ function getPackageName(): string {
 
 function loadNativeAddon(): NativeAddon {
   try {
-    return require(getPackageName());
+    return require("../build/Release/readline-pager.node");
   } catch {
     const p = platform();
     const a = arch();
@@ -40,14 +45,30 @@ function loadNativeAddon(): NativeAddon {
   }
 }
 
+export function createNativePager<T extends Output>(
+  filepath: string,
+  options: Partial<NativeReaderOptions> & { output: T },
+): Pager<T>;
+
 export function createNativePager(
   filepath: string,
-  options: Partial<NativeReaderOptions> = {},
+  options?: Partial<NativeReaderOptions>,
+): Pager<"string">;
+
+export function createNativePager<T extends Output>(
+  filepath: string,
+  options: Partial<NativeReaderOptions> & { output?: T } = {},
 ): Pager {
-  const { pageSize = 1_000, delimiter = "\n", backward = false } = options;
+  const {
+    pageSize = 1_000,
+    delimiter = "\n",
+    backward = false,
+    output = "string",
+  } = options;
 
   if (!filepath) throw new Error("filepath required");
   if (pageSize < 1) throw new RangeError("pageSize must be >= 1");
+
   if (delimiter?.length > 1) {
     throw new RangeError(
       "native reader only supports single-character delimiters",
@@ -55,6 +76,7 @@ export function createNativePager(
   }
 
   const nativeReader = loadNativeAddon();
+  const isBufferOutput = output === "buffer";
 
   if (process.env.PAGER_TEST_CLEANUPS) {
     (globalThis as any).__pager_test_cleanups__ ??= [];
@@ -67,19 +89,19 @@ export function createNativePager(
   async function next() {
     if (closed || !fd) return null;
 
-    const data = await nativeReader.next(fd);
-    if (!data) return null;
+    const buf = await nativeReader.next(fd);
+    if (!buf) return null;
 
-    return data.toString("utf8").split(delimiter);
+    return isBufferOutput ? buf : buf.toString("utf8").split(delimiter);
   }
 
   function nextSync() {
     if (closed || !fd) return null;
 
-    const data = nativeReader.nextSync(fd);
-    if (!data) return null;
+    const buf = nativeReader.nextSync(fd);
+    if (!buf) return null;
 
-    return data.toString("utf8").split(delimiter);
+    return isBufferOutput ? buf : buf.toString("utf8").split(delimiter);
   }
 
   async function close() {
@@ -124,5 +146,5 @@ export function createNativePager(
         tryClose();
       }
     },
-  };
+  } as Pager;
 }

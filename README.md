@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/github/stars/devmor-j/readline-pager" alt="stars">
 </p>
 
-⚡ High-performance paginated file reader for Node.js. Efficiently process large text files without loading them into memory.
+⚡ High-performance paginated file reader for Node.js. Process large text files efficiently without loading them into memory.
 
 - 📦 Zero dependencies
 - ⚡ Up to ~3× faster than Node.js `readline`
@@ -20,7 +20,7 @@
 - 🔁 Async (`for await...of`) and sync (`for...of`) iteration
 - 📄 Page-based reading with manual control (`next`, `nextSync`)
 - 🔀 Forward and backward reading support
-- 🧪 Fully typed with high test coverage (>90%)
+- 🧪 Fully typed with over 90% test coverage
 
 > **Important:**  
 > Performance depends heavily on the `chunkSize` option. Tune it for your storage device. A value of **64 KiB** is usually a good starting point. Increasing it may improve throughput until you reach the best value for your hardware.
@@ -69,7 +69,7 @@ const pager = createPager("./bigfile.txt");
 while ((page = pager.nextSync()) !== null) {}
 
 // Native C++
-for await (const page of createNativePager("./bigfile.txt")) {
+for (const page of createNativePager("./bigfile.txt")) {
 }
 ```
 
@@ -79,38 +79,37 @@ for await (const page of createNativePager("./bigfile.txt")) {
 
 ```ts
 createPager(filepath, {
-  chunkSize?: number,   // default: 64 * 1024 (64 KiB)
-  pageSize?: number,    // default: 1_000
-  delimiter?: string,   // default: "\n"
-  prefetch?: number,    // default: 8
-  backward?: boolean,   // default: false
-  useWorker?: boolean,  // default: false
-  tryNative?: boolean,  // default: true
+  chunkSize?: number,           // default: 64 * 1024 (64 KiB)
+  pageSize?: number,            // default: 1_000
+  delimiter?: string,           // default: "\n"
+  prefetch?: number,            // default: 8
+  backward?: boolean,           // default: false
+  output?: "string" | "buffer", // default: "string"
 });
 
 createNativePager(filepath, {
-  pageSize?: number,    // default: 1_000
-  delimiter?: string,   // default: "\n"
-  backward?: boolean,   // default: false
+  pageSize?: number,            // default: 1_000
+  delimiter?: string,           // default: "\n"
+  backward?: boolean,           // default: false
+  output?: "string" | "buffer", // default: "string"
 });
 ```
 
-- `chunkSize` — number of bytes read per I/O operation.
-- `pageSize` — number of lines per page.
-- `delimiter` — line separator.
-- `prefetch` — maximum number of pages buffered internally.
-- `backward` — read the file from end to start.
-- `useWorker` — offload reading to a worker thread (forward reading only).
-- `tryNative` — attempts to use the native reader, falls back to the non-native version if it fails.
+- `chunkSize` — Number of bytes read per I/O operation.
+- `pageSize` — Number of lines per page.
+- `delimiter` — Line separator.
+- `prefetch` — Maximum number of pages buffered internally.
+- `backward` — Read the file from end to start.
+- `output` — Controls the page data type.
 
 > **Note:**
-> `createNativePager` requires x86 AVX2 or ARM NEON CPU instruction set extensions and will throw if they are not available. It also does **not** support multi-character delimiters due to fast SIMD-based scanning.
+> `createNativePager` requires x86 AVX2 or ARM NEON CPU instruction set extensions and will throw if they are not available. It also does **not** support multi-character delimiters because it uses fast SIMD-based scanning.
 
 ---
 
 ## 📚 API
 
-### `pager.next(): Promise<string[] | null>`
+### `pager.next(): Promise<string[] | Buffer | null>`
 
 Returns the next page asynchronously.
 
@@ -124,7 +123,7 @@ Empty lines are preserved.
 > - A completely empty file (`0` bytes) produces `[""]` on the first read.
 > - A file containing multiple empty lines returns each line as an empty string.
 
-### `pager.nextSync(): string[] | null`
+### `pager.nextSync(): string[] | Buffer | null`
 
 Synchronous version of `pager.next()`.
 

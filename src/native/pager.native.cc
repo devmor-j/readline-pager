@@ -37,6 +37,22 @@ struct PageItem {
   bool owned = false;
 };
 
+struct MMapBacking {
+  const char *data = nullptr;
+  size_t size = 0;
+  std::atomic<uint32_t> refs{1};
+
+  void retain() { refs.fetch_add(1, std::memory_order_acq_rel); }
+
+  void release() {
+    if (refs.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+      if (data && size > 0)
+        munmap(const_cast<char *>(data), size);
+      delete this;
+    }
+  }
+};
+
 static constexpr size_t QUEUE_CAP = 8192;
 static_assert((QUEUE_CAP & (QUEUE_CAP - 1)) == 0);
 
@@ -51,6 +67,7 @@ struct PagerState {
   int fd = -1;
   size_t filesize = 0;
   const char *data = nullptr;
+  MMapBacking *backing = nullptr;
   size_t page_lines = 1000;
   unsigned char delimiter = '\n';
   bool backward = false;
@@ -115,8 +132,10 @@ struct PagerState {
     if (scanner_thread.joinable())
       scanner_thread.join();
 
-    if (data && filesize > 0)
-      munmap(const_cast<char *>(data), filesize);
+    if (backing) {
+      backing->release();
+      backing = nullptr;
+    }
   }
 };
 
@@ -177,9 +196,9 @@ static inline bool queue_pop_item(PagerState *st, PageItem &out) {
 static void slice_buffer_finalize(napi_env env, void *data, void *hint) {
   (void)env;
   (void)data;
-  auto *st = static_cast<PagerState *>(hint);
-  if (st)
-    st->release_ref();
+  auto *backing = static_cast<MMapBacking *>(hint);
+  if (backing)
+    backing->release();
 }
 
 static void owned_buffer_finalize(napi_env env, void *data, void *hint) {
@@ -218,14 +237,18 @@ static inline bool create_page_value(napi_env env, PagerState *st,
     return true;
   }
 
-  st->retain_ref();
+  MMapBacking *backing = st->backing;
+  if (!backing)
+    return false;
 
-  napi_status s = napi_create_external_buffer(env, item.length,
-                                              const_cast<char *>(item.data),
-                                              slice_buffer_finalize, st, out);
+  backing->retain();
+
+  napi_status s = napi_create_external_buffer(
+      env, item.length, const_cast<char *>(item.data), slice_buffer_finalize,
+      backing, out);
 
   if (s != napi_ok) {
-    st->release_ref();
+    backing->release();
     return false;
   }
 
@@ -263,16 +286,27 @@ static inline void forward_finish(PagerState *st, size_t page_start,
 static inline bool build_backward_page_item(PagerState *st,
                                             const Segment *segments,
                                             size_t count, PageItem &out) {
-  size_t total = 0;
-  for (size_t i = 0; i < count; ++i) {
-    total += segments[i].end - segments[i].start;
-    if (i + 1 < count)
-      ++total;
-  }
-
-  if (total == 0) {
+  if (count == 0) {
     out = {nullptr, 0, false};
     return true;
+  }
+
+  size_t total = 0;
+  bool single_nonempty_needs_delim = false;
+
+  for (size_t i = 0; i < count; ++i) {
+    const size_t len = segments[i].end - segments[i].start;
+    total += len;
+  }
+
+  if (count > 1) {
+    total += count - 1;
+  } else {
+    const size_t len = segments[0].end - segments[0].start;
+    if (len > 0 && segments[0].end < st->filesize) {
+      ++total;
+      single_nonempty_needs_delim = true;
+    }
   }
 
   char *buf = static_cast<char *>(malloc(total));
@@ -283,16 +317,23 @@ static inline bool build_backward_page_item(PagerState *st,
     return false;
   }
 
-  char *dst = buf;
+  size_t off = 0;
   for (size_t i = 0; i < count; ++i) {
-    const size_t len = segments[i].end - segments[i].start;
+    const Segment &seg = segments[i];
+    const size_t len = seg.end - seg.start;
+
     if (len > 0) {
-      std::memcpy(dst, st->data + segments[i].start, len);
-      dst += len;
+      std::memcpy(buf + off, st->data + seg.start, len);
+      off += len;
     }
 
-    if (i + 1 < count)
-      *dst++ = static_cast<char>(st->delimiter);
+    if (i + 1 < count) {
+      buf[off++] = static_cast<char>(st->delimiter);
+    }
+  }
+
+  if (single_nonempty_needs_delim) {
+    buf[off++] = static_cast<char>(st->delimiter);
   }
 
   out = {buf, total, true};
@@ -334,7 +375,6 @@ static inline bool backward_consume_delim(PagerState *st, Segment *segments,
 }
 
 #if defined(__x86_64__) || defined(__i386__)
-
 __attribute__((target("avx2,bmi,lzcnt"))) static void
 scan_forward(std::stop_token stop, PagerState *st) {
   const size_t size = st->filesize;
@@ -453,8 +493,10 @@ scan_backward(std::stop_token stop, PagerState *st) {
       segment_count = 0;
     }
 
-    if (segment_count > 0)
-      flush_backward_page(st, segments, segment_count);
+    if (segment_count > 0) {
+      if (!flush_backward_page(st, segments, segment_count))
+        goto done;
+    }
   }
 
 done:
@@ -578,18 +620,15 @@ static void scan_backward(std::stop_token stop, PagerState *st) {
       segment_count = 0;
     }
 
-    if (segment_count > 0)
-      flush_backward_page(st, segments, segment_count);
+    if (segment_count > 0) {
+      if (!flush_backward_page(st, segments, segment_count))
+        goto done;
+    }
   }
 
 done:
   free(segments);
 }
-
-#else
-
-static void scan_forward(std::stop_token stop, PagerState *st) {}
-static void scan_backward(std::stop_token stop, PagerState *st) {}
 
 #endif
 
@@ -618,26 +657,55 @@ static napi_value Open(napi_env env, napi_callback_info info) {
   napi_value argv[5];
   napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
 
+  if (argc < 1) {
+    napi_throw_error(env, nullptr, "Missing file path");
+    return nullptr;
+  }
+
   char path[4096];
   size_t path_len = 0;
-  napi_get_value_string_utf8(env, argv[0], path, sizeof(path), &path_len);
+  if (napi_get_value_string_utf8(env, argv[0], path, sizeof(path), &path_len) !=
+      napi_ok) {
+    napi_throw_error(env, nullptr, "Invalid file path");
+    return nullptr;
+  }
+
+  if (path_len >= sizeof(path)) {
+    napi_throw_error(env, nullptr, "File path is too long");
+    return nullptr;
+  }
 
   uint32_t page_lines = 1000;
-  if (argc >= 2)
-    napi_get_value_uint32(env, argv[1], &page_lines);
+  if (argc >= 2) {
+    if (napi_get_value_uint32(env, argv[1], &page_lines) != napi_ok) {
+      napi_throw_error(env, nullptr, "Invalid page size");
+      return nullptr;
+    }
+  }
+
+  if (page_lines == 0)
+    page_lines = 1;
 
   unsigned char delim = '\n';
   if (argc >= 3) {
     char dstr[8];
     size_t dlen = 0;
-    napi_get_value_string_utf8(env, argv[2], dstr, sizeof(dstr), &dlen);
+    if (napi_get_value_string_utf8(env, argv[2], dstr, sizeof(dstr), &dlen) !=
+        napi_ok) {
+      napi_throw_error(env, nullptr, "Invalid delimiter");
+      return nullptr;
+    }
     if (dlen > 0)
       delim = static_cast<unsigned char>(dstr[0]);
   }
 
   bool backward = false;
-  if (argc >= 4)
-    napi_get_value_bool(env, argv[3], &backward);
+  if (argc >= 4) {
+    if (napi_get_value_bool(env, argv[3], &backward) != napi_ok) {
+      napi_throw_error(env, nullptr, "Invalid backward flag");
+      return nullptr;
+    }
+  }
 
   int fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0) {
@@ -646,6 +714,14 @@ static napi_value Open(napi_env env, napi_callback_info info) {
         "Failed to open file: file does not exist or cannot be read");
     return nullptr;
   }
+
+#if defined(POSIX_FADV_SEQUENTIAL)
+  (void)posix_fadvise(fd, 0, 0,
+                      backward ? POSIX_FADV_RANDOM : POSIX_FADV_SEQUENTIAL);
+#endif
+#if defined(POSIX_FADV_WILLNEED)
+  (void)posix_fadvise(fd, 0, 0, POSIX_FADV_WILLNEED);
+#endif
 
   struct stat stbuf{};
   if (fstat(fd, &stbuf) != 0) {
@@ -665,19 +741,35 @@ static napi_value Open(napi_env env, napi_callback_info info) {
       return nullptr;
     }
 
-#if defined(MADV_RANDOM) && defined(MADV_SEQUENTIAL)
+#if defined(MADV_WILLNEED)
+    (void)madvise(map, fs, MADV_WILLNEED);
+#endif
+#if defined(MADV_SEQUENTIAL) && defined(MADV_RANDOM)
     (void)madvise(map, fs, backward ? MADV_RANDOM : MADV_SEQUENTIAL);
+#elif defined(MADV_SEQUENTIAL)
+    (void)madvise(map, fs, MADV_SEQUENTIAL);
+#endif
+#if defined(MADV_HUGEPAGE)
+    (void)madvise(map, fs, MADV_HUGEPAGE);
 #endif
   }
 
   close(fd);
 
   PagerState *ps = new PagerState();
+  ps->fd = -1;
   ps->filesize = fs;
-  ps->data = static_cast<const char *>(map);
   ps->page_lines = static_cast<size_t>(page_lines);
   ps->delimiter = delim;
   ps->backward = backward;
+
+  if (fs > 0) {
+    auto *backing = new MMapBacking();
+    backing->data = static_cast<const char *>(map);
+    backing->size = fs;
+    ps->backing = backing;
+    ps->data = backing->data;
+  }
 
   ps->scanner_thread = std::jthread(background_scanner, ps);
 
@@ -706,11 +798,20 @@ static napi_value NextSync(napi_env env, napi_callback_info info) {
     return n;
   }
 
+  ps->retain_ref();
+  auto release_ps = [&] {
+    if (ps) {
+      ps->release_ref();
+      ps = nullptr;
+    }
+  };
+
   PageItem item;
 
   while (!queue_pop_item(ps, item)) {
     if (ps->aborted.load(std::memory_order_acquire) ||
         ps->scan_finished.load(std::memory_order_acquire)) {
+      release_ps();
       napi_value n;
       napi_get_null(env, &n);
       return n;
@@ -728,10 +829,12 @@ static napi_value NextSync(napi_env env, napi_callback_info info) {
   if (!create_page_value(env, ps, item, &buf)) {
     if (item.owned && item.data)
       free(const_cast<char *>(item.data));
+    release_ps();
     napi_throw_error(env, nullptr, "Failed to create buffer");
     return nullptr;
   }
 
+  release_ps();
   return buf;
 }
 
@@ -774,6 +877,14 @@ static napi_value Next(napi_env env, napi_callback_info info) {
     return reject_with_error(env, deferred, "Invalid pager handle");
   }
 
+  ps->retain_ref();
+  auto release_ps = [&] {
+    if (ps) {
+      ps->release_ref();
+      ps = nullptr;
+    }
+  };
+
   napi_deferred deferred;
   napi_create_promise(env, &deferred, &promise);
 
@@ -783,10 +894,12 @@ static napi_value Next(napi_env env, napi_callback_info info) {
     if (!create_page_value(env, ps, item, &buf)) {
       if (item.owned && item.data)
         free(const_cast<char *>(item.data));
+      release_ps();
       return reject_with_error(env, deferred, "Failed to create buffer");
     }
 
     napi_resolve_deferred(env, deferred, buf);
+    release_ps();
     return promise;
   }
 
@@ -795,12 +908,12 @@ static napi_value Next(napi_env env, napi_callback_info info) {
     napi_value n;
     napi_get_null(env, &n);
     napi_resolve_deferred(env, deferred, n);
+    release_ps();
     return promise;
   }
 
   auto *data =
       new AsyncWaitData{ps, deferred, {nullptr, 0, false}, false, nullptr};
-  ps->retain_ref();
 
   napi_value name;
   napi_create_string_utf8(env, "WaitPage", NAPI_AUTO_LENGTH, &name);
@@ -851,18 +964,19 @@ static napi_value Next(napi_env env, napi_callback_info info) {
       data, &data->work);
 
   if (s != napi_ok) {
-    ps->release_ref();
+    release_ps();
     delete data;
     return reject_with_error(env, deferred, "Failed to create async work");
   }
 
   if (napi_queue_async_work(env, data->work) != napi_ok) {
     napi_delete_async_work(env, data->work);
-    ps->release_ref();
+    release_ps();
     delete data;
     return reject_with_error(env, deferred, "Failed to queue async work");
   }
 
+  release_ps();
   return promise;
 }
 
