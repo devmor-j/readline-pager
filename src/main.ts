@@ -11,7 +11,7 @@ export function createPager<T extends Output>(
 export function createPager(
   filepath: string,
   options?: PagerOptions,
-): Pager<"array">;
+): Pager<"string">;
 
 export function createPager<T extends Output>(
   filepath: string,
@@ -23,7 +23,7 @@ export function createPager<T extends Output>(
     delimiter = "\n",
     prefetch = 8,
     backward = false,
-    output = "array",
+    output = "string",
   } = options;
 
   if (!filepath) throw new Error("filepath required");

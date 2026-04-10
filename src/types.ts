@@ -1,6 +1,6 @@
 export type AsyncFunction = () => Promise<void>;
 
-export type Output = "array" | "buffer";
+export type Output = "string" | "buffer";
 
 export type PageOutput = string[] | Buffer;
 
@@ -42,7 +42,7 @@ export interface NativeAddon {
   close: (fd: AddonFD) => Promise<void>;
 }
 
-export interface Pager<T extends Output = "array"> {
+export interface Pager<T extends Output = "string"> {
   next(): Promise<ResolvePageOutput<T> | null>;
   nextSync(): ResolvePageOutput<T> | null;
   close(): Promise<void>;

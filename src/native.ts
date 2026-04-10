@@ -53,7 +53,7 @@ export function createNativePager<T extends Output>(
 export function createNativePager(
   filepath: string,
   options?: Partial<NativeReaderOptions>,
-): Pager<"array">;
+): Pager<"string">;
 
 export function createNativePager<T extends Output>(
   filepath: string,
@@ -63,7 +63,7 @@ export function createNativePager<T extends Output>(
     pageSize = 1_000,
     delimiter = "\n",
     backward = false,
-    output = "array",
+    output = "string",
   } = options;
 
   if (!filepath) throw new Error("filepath required");
