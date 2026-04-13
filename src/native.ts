@@ -37,7 +37,7 @@ function getPackageName(): string {
 
 function loadNativeAddon(): NativeAddon {
   try {
-    return require("../build/Release/readline-pager.node");
+    return require(getPackageName());
   } catch {
     const p = platform();
     const a = arch();
