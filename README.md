@@ -149,8 +149,6 @@ node test/benchmark.ts --lines=20000 --page-size=500 --backward
 > Test setup: generated text files (UUID lines), NVMe SSD, Node.js runtime.
 > Results are averaged across multiple runs. Actual performance depends on hardware.
 
----
-
 ### ⚡ Throughput (MB/s)
 
 | Method                 | 1M lines (35 MB) | 10M lines (353 MB) | 100M lines (3.5 GB) | 1B lines (35.3 GB) |
