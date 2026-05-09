@@ -1,5 +1,5 @@
 {
-  "include": ["src"],
+  "include": ["src", "test"],
   "compilerOptions": {
     "types": ["node"],
     "target": "ES2022",
@@ -10,7 +10,6 @@
     "strict": true,
     "declaration": true,
     "sourceMap": false,
-    "esModuleInterop": false,
     "skipLibCheck": true,
     "emitDeclarationOnly": false
   }

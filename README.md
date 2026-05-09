@@ -1,5 +1,6 @@
 # 📄 readline-pager
 
+<!-- rumdl-disable MD033 -->
 <p align="center">
   <img src="https://raw.githubusercontent.com/devmor-j/readline-pager/main/logo.webp" alt="logo" width="349">
 </p>
@@ -22,7 +23,7 @@ efficiently without loading them into memory.
 - 🔁 Async (`for await...of`) and sync (`for...of`) iteration
 - 📄 Page-based reading with manual control (`next`, `nextSync`)
 - 🔀 Forward and backward reading support
-- 🧪 Fully typed with over 90% test coverage
+- 🧪 Fully typed with high test coverage
 
 > **Important:**  
 > Performance depends heavily on the `chunkSize` option. Tune it for your

@@ -425,3 +425,112 @@ suite("stress", () => {
     }
   });
 });
+
+suite("coverage - missing branches", () => {
+  test("forward reader async empty path after truncation", async () => {
+    const content = "some\ncontent";
+    const filepath = await createTmpFile(content);
+    try {
+      const pager = createPager(filepath, { pageSize: 1 });
+      truncateSync(filepath, 0);
+      const page = await pager.next();
+      assert.deepEqual(page, [""]);
+      const end = await pager.next();
+      assert.equal(end, null);
+    } finally {
+      await tryDeleteFile(filepath);
+    }
+  });
+
+  test("backward reader async empty path after truncation", async () => {
+    const content = "some\ncontent";
+    const filepath = await createTmpFile(content);
+
+    try {
+      const pager = createPager(filepath, { backward: true, pageSize: 1 });
+      truncateSync(filepath, 0);
+      const page = await pager.next();
+      assert.deepEqual(page, [""]);
+      const end = await pager.next();
+      assert.equal(end, null);
+    } finally {
+      await tryDeleteFile(filepath);
+    }
+  });
+
+  test("forward reader sync iterator break after async start", async () => {
+    const content = createTextLines(100);
+    const filepath = await createTmpFile(content);
+    try {
+      const pager = createPager(filepath, { pageSize: 10 });
+
+      await pager.next();
+
+      for (const _ of pager) {
+        break;
+      }
+      const after = await pager.next();
+      assert.equal(after, null);
+    } finally {
+      await tryDeleteFile(filepath);
+    }
+  });
+
+  test("backward reader sync iterator break after async start", async () => {
+    const content = createTextLines(100);
+    const filepath = await createTmpFile(content);
+    try {
+      const pager = createPager(filepath, { backward: true, pageSize: 10 });
+      await pager.next();
+      for (const _ of pager) {
+        break;
+      }
+      const after = await pager.next();
+      assert.equal(after, null);
+    } finally {
+      await tryDeleteFile(filepath);
+    }
+  });
+
+  test("native isMusl catch on getReport throw", async () => {
+    if (process.platform !== "linux") return;
+
+    process.report.getReport = () => {
+      throw new Error("boom");
+    };
+
+    const filepath = await createTmpFile("a");
+    try {
+      createNativePager(filepath);
+    } finally {
+      await tryDeleteFile(filepath);
+    }
+  });
+
+  test("close while async next is pending wakes consumerWaiter", async () => {
+    const filepath = await createTmpFile(createTextLines(10));
+    try {
+      const pager = createPager(filepath, { pageSize: 100 });
+      const nextPromise = pager.next();
+      await pager.close();
+      const result = await nextPromise;
+      assert.equal(result, null);
+    } finally {
+      await tryDeleteFile(filepath);
+    }
+  });
+
+  test("backward reader handles sole delimiter file", async () => {
+    const filepath = await createTmpFile("\n");
+
+    try {
+      const pager = createPager(filepath, { backward: true });
+      const page = await pager.next();
+      assert.deepEqual(page, ["", ""]);
+      const end = await pager.next();
+      assert.equal(end, null);
+    } finally {
+      await tryDeleteFile(filepath);
+    }
+  });
+});
