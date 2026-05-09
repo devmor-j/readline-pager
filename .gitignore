@@ -11,3 +11,4 @@ benchmark_*.txt
 build
 prebuilds
 pkg/
+coverage/

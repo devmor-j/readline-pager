@@ -10,9 +10,11 @@
   </a>
   <img src="https://img.shields.io/npm/dw/readline-pager" alt="downloads">
   <img src="https://img.shields.io/github/stars/devmor-j/readline-pager" alt="stars">
+  <img src="coverage.svg" alt="coverage">
 </p>
 
-⚡ High-performance paginated file reader for Node.js. Process large text files efficiently without loading them into memory.
+⚡ High-performance paginated file reader for Node.js. Process large text files
+efficiently without loading them into memory.
 
 - 📦 Zero dependencies
 - ⚡ Up to ~3× faster than Node.js `readline`
@@ -23,7 +25,9 @@
 - 🧪 Fully typed with over 90% test coverage
 
 > **Important:**  
-> Performance depends heavily on the `chunkSize` option. Tune it for your storage device. A value of **64 KiB** is usually a good starting point. Increasing it may improve throughput until you reach the best value for your hardware.
+> Performance depends heavily on the `chunkSize` option. Tune it for your
+> storage device. A value of **64 KiB** is usually a good starting point.
+> Increasing it may improve throughput until you reach the best value for your hardware.
 
 ---
 
@@ -103,7 +107,9 @@ createNativePager(filepath, {
 - `output` — Controls the page data type.
 
 > **Note:**
-> `createNativePager` requires x86 AVX2 or ARM NEON CPU instruction set extensions and will throw if they are not available. It also does **not** support multi-character delimiters because it uses fast SIMD-based scanning.
+> `createNativePager` requires x86 AVX2 or ARM NEON CPU instruction set extensions
+> and will throw if they are not available. It also does **not** support
+> multi-character delimiters because it uses fast SIMD-based scanning.
 
 ---
 
@@ -118,7 +124,8 @@ Returns `null` when the end of the file is reached.
 Empty lines are preserved.
 
 > **Note:**
-> Unlike Node.js `readline`, which may skip empty files or leading empty lines, `readline-pager` always returns all lines.
+> Unlike Node.js `readline`, which may skip empty files or leading empty lines,
+> `readline-pager` always returns all lines.
 >
 > - A completely empty file (`0` bytes) produces `[""]` on the first read.
 > - A file containing multiple empty lines returns each line as an empty string.
