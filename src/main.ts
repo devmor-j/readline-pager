@@ -50,6 +50,6 @@ export function createPager<T extends Output>(
   return reader;
 }
 
-export type * from "./types.js";
+export type { Pager, PagerOptions } from "./types.js";
 export { createNativePager };
 export default createPager;

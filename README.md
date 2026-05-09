@@ -1,5 +1,6 @@
 # 📄 readline-pager
 
+<!-- rumdl-disable MD033 -->
 <p align="center">
   <img src="https://raw.githubusercontent.com/devmor-j/readline-pager/main/logo.webp" alt="logo" width="349">
 </p>
@@ -10,9 +11,11 @@
   </a>
   <img src="https://img.shields.io/npm/dw/readline-pager" alt="downloads">
   <img src="https://img.shields.io/github/stars/devmor-j/readline-pager" alt="stars">
+  <img src="coverage.svg" alt="coverage">
 </p>
 
-⚡ High-performance paginated file reader for Node.js. Process large text files efficiently without loading them into memory.
+⚡ High-performance paginated file reader for Node.js. Process large text files
+efficiently without loading them into memory.
 
 - 📦 Zero dependencies
 - ⚡ Up to ~3× faster than Node.js `readline`
@@ -20,10 +23,12 @@
 - 🔁 Async (`for await...of`) and sync (`for...of`) iteration
 - 📄 Page-based reading with manual control (`next`, `nextSync`)
 - 🔀 Forward and backward reading support
-- 🧪 Fully typed with over 90% test coverage
+- 🧪 Fully typed with high test coverage
 
 > **Important:**  
-> Performance depends heavily on the `chunkSize` option. Tune it for your storage device. A value of **64 KiB** is usually a good starting point. Increasing it may improve throughput until you reach the best value for your hardware.
+> Performance depends heavily on the `chunkSize` option. Tune it for your
+> storage device. A value of **64 KiB** is usually a good starting point.
+> Increasing it may improve throughput until you reach the best value for your hardware.
 
 ---
 
@@ -103,7 +108,9 @@ createNativePager(filepath, {
 - `output` — Controls the page data type.
 
 > **Note:**
-> `createNativePager` requires x86 AVX2 or ARM NEON CPU instruction set extensions and will throw if they are not available. It also does **not** support multi-character delimiters because it uses fast SIMD-based scanning.
+> `createNativePager` requires x86 AVX2 or ARM NEON CPU instruction set extensions
+> and will throw if they are not available. It also does **not** support
+> multi-character delimiters because it uses fast SIMD-based scanning.
 
 ---
 
@@ -118,7 +125,8 @@ Returns `null` when the end of the file is reached.
 Empty lines are preserved.
 
 > **Note:**
-> Unlike Node.js `readline`, which may skip empty files or leading empty lines, `readline-pager` always returns all lines.
+> Unlike Node.js `readline`, which may skip empty files or leading empty lines,
+> `readline-pager` always returns all lines.
 >
 > - A completely empty file (`0` bytes) produces `[""]` on the first read.
 > - A file containing multiple empty lines returns each line as an empty string.
@@ -148,8 +156,6 @@ node test/benchmark.ts --lines=20000 --page-size=500 --backward
 
 > Test setup: generated text files (UUID lines), NVMe SSD, Node.js runtime.
 > Results are averaged across multiple runs. Actual performance depends on hardware.
-
----
 
 ### ⚡ Throughput (MB/s)
 
