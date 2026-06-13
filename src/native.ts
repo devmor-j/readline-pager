@@ -146,5 +146,11 @@ export function createNativePager<T extends Output>(
         tryClose();
       }
     },
+    async [Symbol.asyncDispose]() {
+      await close();
+    },
+    [Symbol.dispose]() {
+      tryClose();
+    },
   } as Pager;
 }

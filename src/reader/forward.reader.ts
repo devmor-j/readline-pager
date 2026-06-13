@@ -226,5 +226,16 @@ export function createForwardReader<T extends Output>(
         }
       }
     },
+    async [Symbol.asyncDispose]() {
+      await close();
+    },
+    [Symbol.dispose]() {
+      if (fdSync) {
+        try {
+          closeSync(fdSync);
+        } catch {}
+        fdSync = null;
+      }
+    },
   } as Pager;
 }

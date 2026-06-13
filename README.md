@@ -76,7 +76,12 @@ while ((page = pager.nextSync()) !== null) {}
 // Native C++
 for (const page of createNativePager("./bigfile.txt")) {
 }
-```
+
+// Automatic cleanup on exit (optional, requires Node.js v22+)
+await using pager = createPager("./bigfile.txt");
+for await (const page of pager) {
+}
+// pager will be disposed automatically when it goes out of scope
 
 ---
 
@@ -170,7 +175,7 @@ node test/benchmark.ts --lines=20000 --page-size=500 --backward
 ## 🛠 Development & Contributing
 
 - Minimum supported Node.js: **v18.12**
-- Development/test environment: **Node v25.8** and **TypeScript v6.0**
+- Development/test environment: **Node v26.3** and **TypeScript v6.0**
 
 Run tests:
 
