@@ -1,7 +1,7 @@
 {
-  "include": ["src", "test"],
+  "include": ["./src", "./test", "./scripts/package-native.ts", "./sample.ts"],
   "compilerOptions": {
-    "types": ["node"],
+    "types": ["node", "@types/deno", "@types/bun"],
     "target": "ES2023",
     "lib": ["ES2023", "ESNext.Disposable"],
     "module": "NodeNext",

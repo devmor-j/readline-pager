@@ -153,10 +153,9 @@ Stops reading and releases resources asynchronously. Safe to call at any time.
 Run the benchmark locally:
 
 ```bash
-npm run benchmark:node
-
-# or customize with args
-node test/benchmark.ts --lines=20000 --page-size=500 --backward
+npm run benchmark                   # default: Node.js
+npm run benchmark -- deno           # Deno runtime
+npm run benchmark -- bun --backward # Bun runtime with custom args
 ```
 
 > Test setup: generated text files (UUID lines), NVMe SSD, Node.js runtime.

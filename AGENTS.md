@@ -13,8 +13,9 @@ High-performance paginated file reader for Node.js. Processes large text files w
 ```bash
 npm i
 npm run build      # builds JS + native addon
-npm test          # runs tests with coverage
-npm run benchmark:node
+npm test              # runs tests with coverage
+npm run benchmark          # default Node.js
+npm run benchmark -- deno  # or bun
 ```
 
 ### Test Patterns

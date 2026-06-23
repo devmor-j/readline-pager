@@ -5,13 +5,10 @@
     "build:js": "tsdown",
     "build:native": "node-gyp rebuild",
     "build": "npm run build:native && npm run build:js",
-    "pretest": "npm run build && node -e \"fs.mkdirSync('coverage', { recursive: true })\"; clear;",
-    "test": "node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info test/**/*.test.ts",
+    "test": "./scripts/test.sh",
     "test:coverage": "npx lcov-badge2 coverage/lcov.info -o coverage.svg",
-    "prepublishOnly": "npm run build && npm run test",
-    "benchmark:node": "node test/benchmark.ts",
-    "benchmark:deno": "deno --allow-write --allow-read --allow-env test/benchmark.ts",
-    "benchmark:bun": "bun test/benchmark.ts",
+    "prepublishOnly": "npm run test",
+    "benchmark": "./scripts/benchmark.sh",
     "prettier": "npx prettier -wu './(src|test)/**/*.{js,cjs,mjs,ts,cts,mts,json,yml,md}'"
   },
   "devDependencies": {
