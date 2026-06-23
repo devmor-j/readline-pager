@@ -225,8 +225,8 @@ export function createForwardReader<T extends Output>(
         }
       }
     },
-    async [Symbol.asyncDispose]() {
-      await close();
+    [Symbol.asyncDispose]() {
+      return close();
     },
     [Symbol.dispose]() {
       if (fdSync) {

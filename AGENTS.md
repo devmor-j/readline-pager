@@ -45,7 +45,10 @@ src/
   native.ts            # native addon factory (uses @node-rs/native-bundle-loader)
 
 test/
-  all.test.ts          # full test suite with validation/files/api/stress/coverage suites
+  cleanup.test.ts      # resource teardown (5 tests)
+  errors.test.ts       # construction rejection, permissions, errors (5 tests)
+  iterate.test.ts      # iteration correctness, boundaries, truncation (8 tests)
+  content.test.ts      # returned-page correctness (empty, delimiters, buffer integrity) (6 tests)
   utils.ts             # createTmpFile, createTextLines, benchmark helpers
   benchmark.ts         # CLI benchmark tool
 ```
@@ -88,6 +91,17 @@ Pager<T> {
 - Empty file → `[""]` on first read
 - Empty lines preserved; do not signal EOF
 - `close()` must be called or rely on iterator `finally` to cleanup
+
+## Test File Organization
+
+Tests are split by **behavioral concern** — each file guards one dimension of what can break:
+
+| File | Tests | Concern |
+|------|-------|--------|
+| `errors.test.ts` | 5 | Construction rejection — empty path, invalid args, permissions, isMusl detection, close-during-next |
+| `content.test.ts` | 6 | Returned-page correctness — empty file, delimiters, trailing delim, buffer integrity |
+| `iterate.test.ts` | 8 | Iteration correctness — sync/async, fwd/bwd, truncation, prefetch boundaries, stress load |
+| `cleanup.test.ts` | 5 | Teardown — close, iterator break, async→sync transition |
 
 ## Testing Conventions
 
@@ -157,6 +171,10 @@ const original = Buffer.concat(chunks);
 - Maintain existing API shape; breaking changes require issue discussion
 - Must work for both ESM and CommonJS consumers via dual exports
 - No external dependencies ever
+
+## Commit Rules
+
+1. **No attributions**: Never include "Generated with", "Assisted by", harness names, or agent names in commit messages. Commit messages must be clean, professional, and contain only the meaningful description of the change.
 
 ## Type Details
 

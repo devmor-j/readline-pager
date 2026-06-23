@@ -246,8 +246,8 @@ export function createBackwardReader<T extends Output>(
         }
       }
     },
-    async [Symbol.asyncDispose]() {
-      await close();
+    [Symbol.asyncDispose]() {
+      return close();
     },
     [Symbol.dispose]() {
       if (fdSync) {
