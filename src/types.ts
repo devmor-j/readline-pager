@@ -1,5 +1,3 @@
-export type AsyncFunction = () => Promise<void>;
-
 export type Output = "string" | "buffer";
 
 export type PageOutput = string[] | Buffer;

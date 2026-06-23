@@ -1,16 +1,9 @@
 import assert from "node:assert";
 import { truncateSync } from "node:fs";
 import { chmod } from "node:fs/promises";
-import { after, suite, test } from "node:test";
+import { suite, test } from "node:test";
 import { createNativePager, createPager } from "../dist/main.mjs";
-import {
-  createTextLines,
-  createTmpFile,
-  runTestCleanup,
-  tryDeleteFile,
-} from "./utils.ts";
-
-after(runTestCleanup);
+import { createTextLines, createTmpFile, tryDeleteFile } from "./utils.ts";
 
 suite("validation", () => {
   test("it throws if filepath is empty", () => {

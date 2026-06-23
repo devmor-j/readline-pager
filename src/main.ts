@@ -41,11 +41,6 @@ export function createPager<T extends Output>(
     ? createBackwardReader(filepath, readerOptions)
     : createForwardReader(filepath, readerOptions);
 
-  if (process.env.PAGER_TEST_CLEANUPS) {
-    (globalThis as any).__pager_test_cleanups__ ??= [];
-    (globalThis as any).__pager_test_cleanups__.push(reader.close);
-  }
-
   return reader;
 }
 
