@@ -98,42 +98,43 @@ export function createBackwardReader<T extends Output>(
       return;
     }
 
-    while (!done && !closed) {
-      while (pageQueue.count < prefetch && pos > 0 && !closed) {
-        const readSize = Math.min(chunkSize, pos);
-        pos -= readSize;
+    try {
+      while (!done && !closed) {
+        while (pageQueue.count < prefetch && pos > 0 && !closed) {
+          const readSize = Math.min(chunkSize, pos);
+          pos -= readSize;
 
-        const buf = Buffer.allocUnsafe(readSize);
-        const { bytesRead } = await fd.read(buf, 0, readSize, pos);
+          const buf = Buffer.allocUnsafe(readSize);
+          const { bytesRead } = await fd.read(buf, 0, readSize, pos);
 
-        if (isBufferOutput) {
-          pageQueue.push(buf.subarray(0, bytesRead));
-        } else {
-          buffer = buf.toString("utf8", 0, bytesRead) + buffer;
+          if (isBufferOutput) {
+            pageQueue.push(buf.subarray(0, bytesRead));
+          } else {
+            buffer = buf.toString("utf8", 0, bytesRead) + buffer;
 
-          if (pos === 0 && buffer.startsWith(delimiter)) {
-            startsWithDelimiter = true;
+            if (pos === 0 && buffer.startsWith(delimiter)) {
+              startsWithDelimiter = true;
+            }
+
+            consumeBuffer();
           }
-
-          consumeBuffer();
-        }
-      }
-
-      if (pos === 0 && !flushed) {
-        flushTail();
-
-        if (fd) {
-          try {
-            await fd.close();
-          } catch {}
-          fd = null;
         }
 
-        break;
-      }
+        if (pos === 0 && !flushed) {
+          flushTail();
+          break;
+        }
 
-      if (!done && !closed) {
-        await new Promise((r) => setImmediate(r));
+        if (!done && !closed) {
+          await new Promise((r) => setImmediate(r));
+        }
+      }
+    } finally {
+      if (fd) {
+        try {
+          await fd.close();
+        } catch {}
+        fd = null;
       }
     }
   })();
@@ -239,10 +240,8 @@ export function createBackwardReader<T extends Output>(
           fdSync = null;
         }
 
-        if (fd?.fd) {
-          try {
-            closeSync(fd.fd);
-          } catch {}
+        if (fd) {
+          fd.close().catch(() => {});
           fd = null;
         }
       }
