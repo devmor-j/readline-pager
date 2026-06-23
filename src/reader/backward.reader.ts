@@ -250,11 +250,20 @@ export function createBackwardReader<T extends Output>(
       return close();
     },
     [Symbol.dispose]() {
+      closed = true;
+      done = true;
+      pageQueue.clear();
+
       if (fdSync) {
         try {
           closeSync(fdSync);
         } catch {}
         fdSync = null;
+      }
+
+      if (fd) {
+        fd.close().catch(() => {});
+        fd = null;
       }
     },
   } as Pager;

@@ -137,12 +137,119 @@ suite("cleanup", () => {
       }
     });
 
+    test("forward reader Symbol.dispose closes sync fd mid-file", async () => {
+      const content = createTextLines(500);
+      const filepath = await createTmpFile(content);
+      try {
+        let disposed;
+        {
+          using pager = createPager(filepath, {
+            pageSize: 10,
+            prefetch: 1,
+            chunkSize: 128,
+          });
+          assert.ok(pager.nextSync());
+          disposed = pager;
+        }
+        assert.equal(disposed.nextSync(), null);
+      } finally {
+        await tryDeleteFile(filepath);
+      }
+    });
+
+    test("backward reader Symbol.dispose closes sync fd mid-file", async () => {
+      const content = createTextLines(500);
+      const filepath = await createTmpFile(content);
+      try {
+        let disposed;
+        {
+          using pager = createPager(filepath, {
+            backward: true,
+            pageSize: 10,
+            prefetch: 1,
+            chunkSize: 128,
+          });
+          assert.ok(pager.nextSync());
+          disposed = pager;
+        }
+        assert.equal(disposed.nextSync(), null);
+      } finally {
+        await tryDeleteFile(filepath);
+      }
+    });
+
+    test("backward reader Symbol.asyncDispose closes resources", async () => {
+      const content = createTextLines(10);
+      const filepath = await createTmpFile(content);
+      try {
+        {
+          await using pager = createPager(filepath, {
+            backward: true,
+            pageSize: 10,
+          });
+          assert.ok(await pager.next());
+        }
+      } finally {
+        await tryDeleteFile(filepath);
+      }
+    });
+
+    test("native Symbol.asyncDispose closes resources", async () => {
+      const content = createTextLines(10);
+      const filepath = await createTmpFile(content);
+      try {
+        {
+          await using pager = createNativePager(filepath);
+          assert.ok(await pager.next());
+        }
+      } finally {
+        await tryDeleteFile(filepath);
+      }
+    });
+
     test("direct call to Symbol.asyncDispose covers return path", async () => {
       const filepath = await createTmpFile(createTextLines(10));
       try {
         const pager = createPager(filepath);
         assert.ok(await pager.next());
         await pager[Symbol.asyncDispose]();
+        assert.equal(await pager.next(), null);
+      } finally {
+        await tryDeleteFile(filepath);
+      }
+    });
+
+    test("direct call to forward reader Symbol.dispose after async read", async () => {
+      const content = createTextLines(500);
+      const filepath = await createTmpFile(content);
+      try {
+        const pager = createPager(filepath, {
+          pageSize: 10,
+          prefetch: 1,
+          chunkSize: 128,
+        });
+        assert.ok(await pager.next());
+        pager[Symbol.dispose]();
+        assert.equal(pager.nextSync(), null);
+        assert.equal(await pager.next(), null);
+      } finally {
+        await tryDeleteFile(filepath);
+      }
+    });
+
+    test("direct call to backward reader Symbol.dispose after async read", async () => {
+      const content = createTextLines(500);
+      const filepath = await createTmpFile(content);
+      try {
+        const pager = createPager(filepath, {
+          backward: true,
+          pageSize: 10,
+          prefetch: 1,
+          chunkSize: 128,
+        });
+        assert.ok(await pager.next());
+        pager[Symbol.dispose]();
+        assert.equal(pager.nextSync(), null);
         assert.equal(await pager.next(), null);
       } finally {
         await tryDeleteFile(filepath);
