@@ -1,16 +1,18 @@
 {
-  "include": ["src", "test"],
+  "include": ["./src", "./test", "./scripts/package-native.ts", "./sample.ts"],
   "compilerOptions": {
-    "types": ["node"],
-    "target": "ES2022",
+    "types": ["node", "@types/deno", "@types/bun"],
+    "target": "ES2023",
+    "lib": ["ES2023", "ESNext.Disposable"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "strict": true,
     "declaration": true,
     "sourceMap": false,
     "skipLibCheck": true,
-    "emitDeclarationOnly": false
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   }
 }

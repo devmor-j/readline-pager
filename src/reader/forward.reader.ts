@@ -1,8 +1,8 @@
 import { closeSync, openSync, readSync, statSync } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import { open } from "node:fs/promises";
-import { createRingBuffer } from "../helper.js";
-import type { Output, PageOutput, Pager, ReaderOptions } from "../types.js";
+import { createRingBuffer } from "../helper.ts";
+import type { Output, PageOutput, Pager, ReaderOptions } from "../types.ts";
 
 export function createForwardReader<T extends Output>(
   filepath: string,
@@ -89,36 +89,37 @@ export function createForwardReader<T extends Output>(
       return;
     }
 
-    while (!done && !closed) {
-      while (pageQueue.count < prefetch && pos < size && !closed) {
-        const readSize = Math.min(chunkSize, size - pos);
-        const buf = Buffer.allocUnsafe(readSize);
-        const { bytesRead } = await fd.read(buf, 0, readSize, pos);
-        pos += bytesRead;
+    try {
+      while (!done && !closed) {
+        while (pageQueue.count < prefetch && pos < size && !closed) {
+          const readSize = Math.min(chunkSize, size - pos);
+          const buf = Buffer.allocUnsafe(readSize);
+          const { bytesRead } = await fd.read(buf, 0, readSize, pos);
+          pos += bytesRead;
 
-        if (isBufferOutput) {
-          pageQueue.push(buf.subarray(0, bytesRead));
-        } else {
-          buffer = buffer + buf.toString("utf8", 0, bytesRead);
-          consumeBuffer();
-        }
-      }
-
-      if (pos >= size && !flushed) {
-        flushTail();
-
-        if (fd) {
-          try {
-            await fd.close();
-          } catch {}
-          fd = null;
+          if (isBufferOutput) {
+            pageQueue.push(buf.subarray(0, bytesRead));
+          } else {
+            buffer = buffer + buf.toString("utf8", 0, bytesRead);
+            consumeBuffer();
+          }
         }
 
-        break;
-      }
+        if (pos >= size && !flushed) {
+          flushTail();
+          break;
+        }
 
-      if (!done && !closed) {
-        await new Promise((r) => setImmediate(r));
+        if (!done && !closed) {
+          await new Promise((r) => setImmediate(r));
+        }
+      }
+    } finally {
+      if (fd) {
+        try {
+          await fd.close();
+        } catch {}
+        fd = null;
       }
     }
   })();
@@ -218,12 +219,30 @@ export function createForwardReader<T extends Output>(
           fdSync = null;
         }
 
-        if (fd?.fd) {
-          try {
-            closeSync(fd.fd);
-          } catch {}
+        if (fd) {
+          fd.close().catch(() => {});
           fd = null;
         }
+      }
+    },
+    [Symbol.asyncDispose]() {
+      return close();
+    },
+    [Symbol.dispose]() {
+      closed = true;
+      done = true;
+      pageQueue.clear();
+
+      if (fdSync) {
+        try {
+          closeSync(fdSync);
+        } catch {}
+        fdSync = null;
+      }
+
+      if (fd) {
+        fd.close().catch(() => {});
+        fd = null;
       }
     },
   } as Pager;

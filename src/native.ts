@@ -5,7 +5,7 @@ import type {
   NativeReaderOptions,
   Output,
   Pager,
-} from "./types.js";
+} from "./types.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -78,11 +78,6 @@ export function createNativePager<T extends Output>(
   const nativeReader = loadNativeAddon();
   const isBufferOutput = output === "buffer";
 
-  if (process.env.PAGER_TEST_CLEANUPS) {
-    (globalThis as any).__pager_test_cleanups__ ??= [];
-    (globalThis as any).__pager_test_cleanups__.push(nativeReader.close);
-  }
-
   let fd = nativeReader.open(filepath, pageSize, delimiter, backward);
   let closed = false;
 
@@ -145,6 +140,12 @@ export function createNativePager<T extends Output>(
       } finally {
         tryClose();
       }
+    },
+    [Symbol.asyncDispose]() {
+      return close();
+    },
+    [Symbol.dispose]() {
+      tryClose();
     },
   } as Pager;
 }

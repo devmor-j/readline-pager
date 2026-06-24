@@ -1,5 +1,3 @@
-export type AsyncFunction = () => Promise<void>;
-
 export type Output = "string" | "buffer";
 
 export type PageOutput = string[] | Buffer;
@@ -48,4 +46,6 @@ export interface Pager<T extends Output = "string"> {
   close(): Promise<void>;
   [Symbol.asyncIterator](): AsyncIterator<ResolvePageOutput<T>>;
   [Symbol.iterator](): Iterator<ResolvePageOutput<T>>;
+  [Symbol.asyncDispose](): Promise<void>;
+  [Symbol.dispose](): void;
 }
