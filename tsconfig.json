@@ -7,11 +7,12 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "strict": true,
     "declaration": true,
     "sourceMap": false,
     "skipLibCheck": true,
-    "emitDeclarationOnly": false
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   }
 }

@@ -22,10 +22,7 @@ node --test \
   --test-reporter-destination=stdout \
   --test-reporter=lcov \
   --test-reporter-destination="$ROOT/coverage/lcov.info" \
-  "$ROOT/test/cleanup.test.ts" \
-  "$ROOT/test/content.test.ts" \
-  "$ROOT/test/errors.test.ts" \
-  "$ROOT/test/iterate.test.ts"
+  "$ROOT/test/**/*.test.ts"
 
 # Generate coverage badge
 npx lcov-badge2 "$ROOT/coverage/lcov.info" -o "$ROOT/coverage.svg"

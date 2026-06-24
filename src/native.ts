@@ -5,7 +5,7 @@ import type {
   NativeReaderOptions,
   Output,
   Pager,
-} from "./types.js";
+} from "./types.ts";
 
 const require = createRequire(import.meta.url);
 

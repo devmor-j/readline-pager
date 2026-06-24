@@ -6,14 +6,25 @@ High-performance paginated file reader for Node.js. Processes large text files w
 
 **Key Stats:** 100% coverage target, zero external dependencies, ~3× faster than Node.js `readline` (JS), ~6× faster with native C++.
 
+## Codemem
+
+MANDATORY: Before ANY file operation, load `.claude/skills/codemem/SKILL.md`. No exceptions.
+
+MEMORY RULE: Save user decisions, preferences, and project rules as `codemem` memories.
+If I say "always do X" or "I prefer Y" — store it.
+
+## Code Quality Rules
+
+- Never organize or group imports, instead run `npm run prettier` before done.
+
 ## Exact Commands
 
 ### Setup & Build
 
 ```bash
 npm i
-npm run build      # builds JS + native addon
-npm test              # runs tests with coverage
+npm run build              # builds JS + native addon
+npm test                   # runs tests with coverage
 npm run benchmark          # default Node.js
 npm run benchmark -- deno  # or bun
 ```

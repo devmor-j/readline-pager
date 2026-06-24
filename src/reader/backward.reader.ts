@@ -1,8 +1,8 @@
 import { closeSync, openSync, readSync, statSync } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import { open } from "node:fs/promises";
-import { createRingBuffer } from "../helper.js";
-import type { Output, PageOutput, Pager, ReaderOptions } from "../types.js";
+import { createRingBuffer } from "../helper.ts";
+import type { Output, PageOutput, Pager, ReaderOptions } from "../types.ts";
 
 export function createBackwardReader<T extends Output>(
   filepath: string,

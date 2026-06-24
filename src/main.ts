@@ -1,6 +1,6 @@
-import { createBackwardReader } from "./reader/backward.reader.js";
-import { createForwardReader } from "./reader/forward.reader.js";
-import type { Output, Pager, PagerOptions, ReaderOptions } from "./types.js";
+import { createBackwardReader } from "./reader/backward.reader.ts";
+import { createForwardReader } from "./reader/forward.reader.ts";
+import type { Output, Pager, PagerOptions, ReaderOptions } from "./types.ts";
 
 export function createPager<T extends Output>(
   filepath: string,
@@ -44,5 +44,5 @@ export function createPager<T extends Output>(
   return reader;
 }
 
-export { createNativePager } from "./native.js";
-export type { Pager, PagerOptions } from "./types.js";
+export { createNativePager } from "./native.ts";
+export type { Pager, PagerOptions } from "./types.ts";
