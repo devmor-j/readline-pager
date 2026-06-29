@@ -42,7 +42,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.map"
   ],
   "keywords": [
     "nodejs",

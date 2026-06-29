@@ -7,6 +7,7 @@ export default defineConfig({
   format: ["esm", "cjs"],
   clean: true,
   dts: true,
+  sourcemap: true,
   deps: {
     neverBundle: [/\.node$/],
   },
