@@ -32,13 +32,16 @@ npm run benchmark -- deno  # or bun
 ### Test Patterns
 
 ```bash
-# Single test file
+# Single test file (uses c8 for coverage)
 node --test test/files.test.ts
 
 # Single test
 node --test --test-name-pattern="empty file" test/**/*.test.ts
 
-# Coverage report
+# Full test suite with coverage
+npm test
+
+# Regenerate coverage badge
 npm run test:coverage
 ```
 
