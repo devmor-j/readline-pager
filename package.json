@@ -3,7 +3,7 @@
   "version": "0.8.0",
   "scripts": {
     "build:js": "tsdown",
-    "build:native": "node-gyp rebuild",
+    "build:native": "node-gyp rebuild && node ./scripts/gen-compile-flags.ts",
     "build": "npm run build:native && npm run build:js",
     "test": "./scripts/test.sh",
     "test:coverage": "npx --yes lcov-badge2 coverage/lcov.info -o coverage.svg",
