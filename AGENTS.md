@@ -15,18 +15,19 @@ If I say "always do X" or "I prefer Y" — store it.
 
 ## Code Quality Rules
 
-- Never organize or group imports, instead run `npm run prettier` before done.
+- Never organize or group imports — instead, run `npm run prettier` before done (the `prettier-plugin-organize-imports` plugin auto-sorts them).
+- No external dependencies ever — only Node.js built-ins.
 
 ## Exact Commands
 
-### Setup & Build
-
 ```bash
 npm i
-npm run build              # builds JS + native addon
-npm test                   # runs tests with coverage
+npm run build              # builds native (node-gyp) + JS (tsdown)
+npm test                   # runs tests with c8 coverage
 npm run benchmark          # default Node.js
 npm run benchmark -- deno  # or bun
+npm run prettier           # format + sort imports
+npm run test:coverage      # regenerate coverage.svg badge
 ```
 
 ### Test Patterns
@@ -37,10 +38,9 @@ node --test test/files.test.ts
 
 # Single test
 node --test --test-name-pattern="empty file" test/**/*.test.ts
-
-# Coverage report
-npm run test:coverage
 ```
+
+Tests import from `../dist/main.mjs` — build first or they fail.
 
 ## Architecture
 
@@ -48,42 +48,31 @@ npm run test:coverage
 
 ```text
 src/
-  main.ts              # pager factory, exports createPager/createNativePager
+  main.ts              # exports createPager (JS factory)
+  native.ts            # exports createNativePager (C++ addon factory)
   types.ts             # Pager, PagerOptions, ReaderOptions interfaces
   helper.ts            # createRingBuffer utility
   reader/
     forward.reader.ts  # async/sync forward reader
     backward.reader.ts # async/sync backward reader
-  native.ts            # native addon factory (uses @node-rs/native-bundle-loader)
+  native/
+    pager.native.cc    # C++23 N-API module (mmap + SIMD)
 
 test/
   cleanup.test.ts      # resource teardown (5 tests)
-  errors.test.ts       # construction rejection, permissions, errors (5 tests)
+  errors.test.ts       # construction rejection, permissions (5 tests)
   iterate.test.ts      # iteration correctness, boundaries, truncation (8 tests)
-  content.test.ts      # returned-page correctness (empty, delimiters, buffer integrity) (6 tests)
+  content.test.ts      # returned-page correctness (6 tests)
   utils.ts             # createTmpFile, createTextLines, benchmark helpers
   benchmark.ts         # CLI benchmark tool
 ```
 
-### Native Addon (C++)
+### Key Architecture Details
 
-- C++23, N-API module
-- Uses `mmap` + `madvise` for zero-copy forward reads; backward reads allocate memory
-- SIMD vectorization (AVX2/NEON) for delimiter scanning
-- Background `std::jthread` feeds bounded power-of-two ring buffer
-- Atomic reference counting bridges N-API, background thread, and V8 finalizers
-- Limited to single-character delimiters (SIMD-based)
-
-### Important Options
-
-| Option | Default | Notes |
-|--------|---------|-------|
-| `chunkSize` | 64 KiB | Strongly affects performance; tune per storage device |
-| `pageSize` | 1,000 | Lines per page returned |
-| `prefetch` | 8 | Internal page buffer size |
-| `delimiter` | `\n` | Line separator |
-| `backward` | `false` | Read from end to start |
-| `output` | `"string"` | `"string"` or `"buffer"` (raw chunks) |
+- **Dual-FD pattern**: Both readers open TWO file descriptors — one sync (`openSync`) for `nextSync()`, one async (`fs/promises.open`) for the background prefetch loop. They are closed independently.
+- **Async prefetch**: A voided IIFE starts on construction, fills a ring buffer to `prefetch` depth, and yields via `setImmediate` between fill bursts. `flushTail()` pushes remaining data as the final page.
+- **Ring buffer** (`helper.ts`): Grows dynamically (doubles on full). The async `shift(done)` method waits on a consumer-waiter promise when empty. `wake()` resolves pending waiters (used by `close()`).
+- **Native cleanup**: `native.ts` uses fire-and-forget `void close().catch(() => {})` in `Symbol.dispose` and sync iterator `finally` blocks.
 
 ### API Contract
 
@@ -104,93 +93,63 @@ Pager<T> {
 - Empty lines preserved; do not signal EOF
 - `close()` must be called or rely on iterator `finally` to cleanup
 
-## Test File Organization
+### Important Options
 
-Tests are split by **behavioral concern** — each file guards one dimension of what can break:
-
-| File | Tests | Concern |
-|------|-------|--------|
-| `errors.test.ts` | 5 | Construction rejection — empty path, invalid args, permissions, isMusl detection, close-during-next |
-| `content.test.ts` | 6 | Returned-page correctness — empty file, delimiters, trailing delim, buffer integrity |
-| `iterate.test.ts` | 8 | Iteration correctness — sync/async, fwd/bwd, truncation, prefetch boundaries, stress load |
-| `cleanup.test.ts` | 5 | Teardown — close, iterator break, async→sync transition |
+| Option | Default | Notes |
+|--------|---------|-------|
+| `chunkSize` | 64 KiB | Strongly affects performance; tune per storage device |
+| `pageSize` | 1,000 | Lines per page returned |
+| `prefetch` | 8 | Internal page buffer size |
+| `delimiter` | `\n` | Line separator |
+| `backward` | `false` | Read from end to start |
+| `output` | `"string"` | `"string"` or `"buffer"` (raw chunks) |
 
 ## Testing Conventions
 
 - Tests use `createTmpFile` to write to `./tmp/test/` with UUID filenames
-- Sync iterator (`for...of`) cleanup runs in a `finally` block and properly closes the `FileHandle`
-
-## Build Artifacts
-
-- `dist/main.cjs` — CommonJS
-- `dist/main.mjs` — ESM
-- `dist/main.d.mts` — TypeScript declarations
-- `coverage/lcov.info` — Coverage data
-- `coverage.svg` — Badge (regenerated via `npm run test:coverage`)
+- Tests use Node.js built-in test runner: `suite`/`test` from `node:test`, `assert` from `node:assert`
+- Test cleanup uses `try/finally` with `tryDeleteFile(filepath)`
+- All tests are async (even for sync-only paths)
+- Test script runs: `c8 --reporter=text --reporter=lcov node --test --experimental-strip-types --enable-source-maps --test-concurrency=4 --test-timeout=120000 "test/**/*.test.ts"`
 
 ## Operational Gotchas
 
-1. **Iterator cleanup**: Sync iterator (`for...of`) cleanup runs in a `finally` block that closes both the sync fd and the async `FileHandle`. Breaking out of `for...of` or exhausting the loop is safe — cleanup handles both. Manual users must still explicitly `await pager.close()`.
-
-2. **Truncation handling**: If a file is truncated mid-read, both readers handle it gracefully by returning empty pages until EOF.
-
-3. **Native mode limitations**: `createNativePager` requires x86 AVX2 or ARM NEON, throws on unsupported CPUs, and does not support multi-character delimiters.
-
-4. **Buffer output integrity**: When using `output: "buffer"`, pages are raw `Buffer` objects. Concatenate them (reversing for backward reads) to reconstruct the original file content.
-
-5. **Test environment**: Tests require Node.js v26.x and TypeScript v6.x for the dev environment; minimum runtime is v18.12.
-
-## Common Patterns
-
-```ts
-// Async iterator
-for await (const page of createPager("file.txt", { pageSize: 1000 })) {
-  console.log(page[0]);
-}
-
-// Manual async
-const pager = createPager("file.txt", { pageSize: 1000 });
-while (true) {
-  const page = await pager.next();
-  if (!page) break;
-  // process page
-}
-await pager.close();
-
-// Manual sync
-let pager = createPager("file.txt", { pageSize: 1000 });
-while (true) {
-  const page = pager.nextSync();
-  if (!page) break;
-  // process page
-}
-pager.close();
-
-// Buffer output
-const pager = createPager("file.txt", { output: "buffer", pageSize: 1 });
-const chunks: Buffer[] = [];
-for await (const chunk of pager) chunks.push(chunk);
-const original = Buffer.concat(chunks);
-```
+1. **Dual FD close**: The sync fd is closed in `fillSync()` when a sync read reaches EOF, the async fd is closed in the background IIFE `finally`. If using only `next()`, the sync fd stays open until `close()`.
+2. **`Symbol.iterator` finally**: Closes both fds. The async fd is fire-and-forget (`fd.close().catch(() => {})`). Dispose cannot await.
+3. **Native mode**: Requires x86 AVX2 or ARM NEON (throws on unsupported CPUs). Linux-only. No multi-character delimiters.
+4. **Empty file**: Both readers push `[""]` (or empty `Buffer`) immediately on construction when `size === 0`. The async IIFE checks `done` flag to avoid double-push.
+5. **Musl detection**: `isMusl()` in `native.ts` checks `process.report.getReport()` for `glibcVersionRuntime`.
+6. **Backward reader**: Uses `lastIndexOf`, prepends to buffer, tracks `startsWithDelimiter` for leading-newline edge case. Page order is naturally reversed.
+7. **Buffer output**: Pages are raw `Buffer` objects. Concatenate (reversing for backward) to reconstruct the original: `Buffer.concat(chunks)` / `Buffer.concat(chunks.toReversed())`.
+8. **Build artifacts**: `dist/main.{cjs,mjs,d.mts}` + `dist/native.{cjs,mjs}`. Tests import from `dist/main.mjs`.
+9. **Platform packages**: Optional dependencies (`@devmor-j/readline-pager-linux-{x64,arm64}`, musl variants) are published per-platform and loaded by platform detection in `native.ts`.
 
 ## Code Style & Conventions
 
 - ESM by default (`type: module` in `package.json`)
 - Strict TypeScript (`"strict": true`)
-- No external dependencies — only Node.js built-ins
-- Keep PRs small and focused
+- No external dependencies
 - Maintain 90%+ line coverage
-- Maintain existing API shape; breaking changes require issue discussion
 - Must work for both ESM and CommonJS consumers via dual exports
-- No external dependencies ever
+- Run `npm run prettier` before committing (formats + sorts imports)
 
 ## Commit Rules
 
-1. **Natural casing**: Commit messages must use natural casing as a human writer would — first letter capitalized, proper nouns and acronyms (SQL, Node.js, TypeScript, etc.) capitalized normally. Never force everything to lowercase.
-2. **No attributions**: Never include "Generated with", "Assisted by", harness names, or agent names in commit messages. Commit messages must be clean, professional, and contain only the meaningful description of the change.
+1. **Natural casing**: First letter capitalized, proper nouns/acronyms (SQL, Node.js, etc.) capitalized normally. Never force lowercase.
+2. **No attributions**: No "Generated with", "Assisted by", or agent names in commit messages.
 
 ## Type Details
 
 - `Output` = `"string" | "buffer"`
 - `PageOutput` = `string[] | Buffer`
 - `ResolvePageOutput<T>` = `T extends "buffer" ? Buffer : string[]`
+- `Pager<T>` is generic — `next()` return type resolves based on `output` option
+- `ReaderOptions`: `chunkSize, pageSize, delimiter, prefetch, output`
+- `NativeReaderOptions`: `pageSize, delimiter, backward, output`
+
+## Environment
+
+- Minimum Node.js: 18.12, Dev: 26.x, TypeScript 6.x
+- Bundler: `tsdown` v0.22.x, Native build: `node-gyp`
+- CI: GitHub Actions (Linux x64 + arm64, Alpine for musl)
+- MCP: `codemem` server configured in `.mcp.json`

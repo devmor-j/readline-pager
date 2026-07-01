@@ -1,5 +1,5 @@
 {
-  "include": ["./src", "./test", "./scripts/package-native.ts", "./sample.ts"],
+  "include": ["./src", "./test", "./scripts", "./sample.ts"],
   "compilerOptions": {
     "types": ["node", "@types/deno", "@types/bun"],
     "target": "ES2023",

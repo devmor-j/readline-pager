@@ -8,6 +8,7 @@ benchmark_*.txt
 .DS_Store
 .vscode
 .cache
+compile_flags.txt
 build
 prebuilds
 pkg/

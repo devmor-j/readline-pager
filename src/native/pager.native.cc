@@ -11,6 +11,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <mutex>
+#include <new>
 #include <node_api.h>
 #include <stop_token>
 #include <sys/mman.h>
@@ -63,7 +64,9 @@ static inline void queue_clear(PagerState *st);
 static inline bool queue_push_item(PagerState *st, const PageItem &item);
 static inline bool queue_pop_item(PagerState *st, PageItem &out);
 
-struct PagerState {
+static constexpr size_t STACK_SEG_CAP = 256;
+
+struct alignas(64) PagerState {
   int fd = -1;
   size_t filesize = 0;
   const char *data = nullptr;
@@ -73,8 +76,16 @@ struct PagerState {
   bool backward = false;
 
   PageItem queue[QUEUE_CAP];
+
+  char _pad0[64];
+
   std::atomic<size_t> head{0};
+
+  char _pad1[64 - sizeof(std::atomic<size_t>)];
+
   std::atomic<size_t> tail{0};
+
+  char _pad2[64 - sizeof(std::atomic<size_t>)];
 
   std::mutex mtx;
   std::condition_variable cv;
@@ -82,22 +93,26 @@ struct PagerState {
   std::atomic<bool> scan_finished{false};
   std::atomic<bool> aborted{false};
 
-  std::atomic<uint32_t> refs{0};
+  std::atomic<uint32_t> refs{1};
   std::atomic<bool> external_finalized{false};
   std::atomic<bool> destroyed{false};
 
   std::jthread scanner_thread;
 
-  void retain_ref() { refs.fetch_add(1, std::memory_order_acq_rel); }
+  void retain_ref() { refs.fetch_add(1, std::memory_order_relaxed); }
 
   void release_ref() {
-    if (refs.fetch_sub(1, std::memory_order_acq_rel) == 1)
+    if (refs.fetch_sub(1, std::memory_order_acq_rel) == 2)
       maybe_destroy();
   }
 
   void request_close() {
     aborted.store(true, std::memory_order_release);
-    scan_finished.store(true, std::memory_order_release);
+
+    {
+      std::lock_guard<std::mutex> lk(mtx);
+      scan_finished.store(true, std::memory_order_release);
+    }
 
     if (scanner_thread.joinable())
       scanner_thread.request_stop();
@@ -114,7 +129,7 @@ struct PagerState {
   void maybe_destroy() {
     if (!external_finalized.load(std::memory_order_acquire))
       return;
-    if (refs.load(std::memory_order_acquire) != 0)
+    if (refs.load(std::memory_order_acquire) != 1)
       return;
 
     bool expected = false;
@@ -126,7 +141,12 @@ struct PagerState {
 
   ~PagerState() {
     aborted.store(true, std::memory_order_release);
-    scan_finished.store(true, std::memory_order_release);
+
+    {
+      std::lock_guard<std::mutex> lk(mtx);
+      scan_finished.store(true, std::memory_order_release);
+    }
+
     cv.notify_all();
 
     if (scanner_thread.joinable())
@@ -168,12 +188,23 @@ static inline bool queue_push_item(PagerState *st, const PageItem &item) {
         return false;
 
       st->queue[head] = item;
+
+      const bool was_empty = st->tail.load(std::memory_order_acquire) == head;
+
       st->head.store(next, std::memory_order_release);
-      st->cv.notify_one();
+
+      if (was_empty)
+        st->cv.notify_one();
       return true;
     }
 
-    std::unique_lock lk(st->mtx);
+#if defined(__x86_64__) || defined(__i386__)
+    _mm_pause();
+#elif defined(__aarch64__) || defined(__arm__)
+    asm volatile("yield" ::: "memory");
+#endif
+
+    std::unique_lock<std::mutex> lk(st->mtx);
     st->cv.wait(lk, [&] {
       return st->aborted.load(std::memory_order_acquire) || !queue_full(st);
     });
@@ -189,7 +220,6 @@ static inline bool queue_pop_item(PagerState *st, PageItem &out) {
 
   out = st->queue[tail];
   st->tail.store((tail + 1) & (QUEUE_CAP - 1), std::memory_order_release);
-  st->cv.notify_one();
   return true;
 }
 
@@ -204,7 +234,6 @@ static void slice_buffer_finalize(napi_env env, void *data, void *hint) {
 static void owned_buffer_finalize(napi_env env, void *data, void *hint) {
   (void)env;
   (void)hint;
-  (void)data;
   free(data);
 }
 
@@ -311,6 +340,7 @@ static inline bool build_backward_page_item(PagerState *st,
 
   char *buf = static_cast<char *>(malloc(total));
   if (!buf) {
+    std::lock_guard<std::mutex> lk(st->mtx);
     st->aborted.store(true, std::memory_order_release);
     st->scan_finished.store(true, std::memory_order_release);
     st->cv.notify_all();
@@ -387,6 +417,9 @@ scan_forward(std::stop_token stop, PagerState *st) {
   size_t block_begin = 0;
   while (block_begin < size && !stop.stop_requested() &&
          !st->aborted.load(std::memory_order_acquire)) {
+    if (block_begin + 2 * BLOCK_SIZE <= size)
+      __builtin_prefetch(data + block_begin + 2 * BLOCK_SIZE, 0, 3);
+
     const size_t block_end = std::min(size, block_begin + BLOCK_SIZE);
     size_t i = block_begin;
 
@@ -421,6 +454,12 @@ scan_forward(std::stop_token stop, PagerState *st) {
 
   if (!st->aborted.load(std::memory_order_acquire))
     forward_finish(st, page_start, size);
+
+  {
+    std::lock_guard<std::mutex> lk(st->mtx);
+    st->scan_finished.store(true, std::memory_order_release);
+  }
+  st->cv.notify_all();
 }
 
 __attribute__((target("avx2,bmi,lzcnt"))) static void
@@ -430,12 +469,23 @@ scan_backward(std::stop_token stop, PagerState *st) {
   const __m256i needle = _mm256_set1_epi8(static_cast<char>(st->delimiter));
 
   const size_t cap = std::max<size_t>(st->page_lines, 1);
-  Segment *segments = static_cast<Segment *>(malloc(sizeof(Segment) * cap));
-  if (!segments) {
-    st->aborted.store(true, std::memory_order_release);
-    st->scan_finished.store(true, std::memory_order_release);
-    st->cv.notify_all();
-    return;
+
+  Segment *segments;
+  Segment stack_segments[STACK_SEG_CAP];
+  bool heap_alloced = false;
+
+  if (cap <= STACK_SEG_CAP) {
+    segments = stack_segments;
+  } else {
+    segments = static_cast<Segment *>(malloc(sizeof(Segment) * cap));
+    if (!segments) {
+      std::lock_guard<std::mutex> lk(st->mtx);
+      st->aborted.store(true, std::memory_order_release);
+      st->scan_finished.store(true, std::memory_order_release);
+      st->cv.notify_all();
+      return;
+    }
+    heap_alloced = true;
   }
 
   size_t segment_count = 0;
@@ -444,6 +494,9 @@ scan_backward(std::stop_token stop, PagerState *st) {
 
   while (block_end > 0 && !stop.stop_requested() &&
          !st->aborted.load(std::memory_order_acquire)) {
+    if (block_end >= 2 * BLOCK_SIZE)
+      __builtin_prefetch(data + block_end - 2 * BLOCK_SIZE, 0, 3);
+
     const size_t block_start =
         (block_end > BLOCK_SIZE) ? (block_end - BLOCK_SIZE) : 0;
 
@@ -500,10 +553,28 @@ scan_backward(std::stop_token stop, PagerState *st) {
   }
 
 done:
-  free(segments);
+  if (heap_alloced)
+    free(segments);
+
+  {
+    std::lock_guard<std::mutex> lk(st->mtx);
+    st->scan_finished.store(true, std::memory_order_release);
+  }
+  st->cv.notify_all();
 }
 
 #elif defined(__aarch64__) || defined(__arm__)
+
+static inline uint32_t neon_movemask(uint8x16_t cmp) {
+  uint8x16_t p = vshrq_n_u8(cmp, 7);
+  uint64_t lo = vgetq_lane_u64(vreinterpretq_u64_u8(p), 0);
+  uint64_t hi = vgetq_lane_u64(vreinterpretq_u64_u8(p), 1);
+  uint32_t lo_mask =
+      static_cast<uint32_t>(((lo * 0x0101010101010101ULL) >> 56) & 0xFF);
+  uint32_t hi_mask =
+      static_cast<uint32_t>(((hi * 0x0101010101010101ULL) >> 56) & 0xFF);
+  return lo_mask | (hi_mask << 8);
+}
 
 static void scan_forward(std::stop_token stop, PagerState *st) {
   const size_t size = st->filesize;
@@ -516,6 +587,9 @@ static void scan_forward(std::stop_token stop, PagerState *st) {
   size_t block_begin = 0;
   while (block_begin < size && !stop.stop_requested() &&
          !st->aborted.load(std::memory_order_acquire)) {
+    if (block_begin + 2 * BLOCK_SIZE <= size)
+      __builtin_prefetch(data + block_begin + 2 * BLOCK_SIZE, 0, 3);
+
     const size_t block_end = std::min(size, block_begin + BLOCK_SIZE);
     size_t i = block_begin;
 
@@ -524,16 +598,14 @@ static void scan_forward(std::stop_token stop, PagerState *st) {
          i += 16) {
       const uint8x16_t chunk = vld1q_u8(data + i);
       const uint8x16_t cmp = vceqq_u8(chunk, needle);
-      const uint64x2_t lanes = vreinterpretq_u64_u8(cmp);
+      uint32_t mask = neon_movemask(cmp);
 
-      if (vgetq_lane_u64(lanes, 0) || vgetq_lane_u64(lanes, 1)) {
-        for (int b = 0; b < 16; ++b) {
-          if (data[i + static_cast<size_t>(b)] == st->delimiter) {
-            if (!forward_consume_delim(st, i + static_cast<size_t>(b),
-                                       page_start, lines))
-              return;
-          }
-        }
+      while (mask) {
+        const uint32_t bit = static_cast<uint32_t>(__builtin_ctz(mask));
+        const size_t pos = i + bit;
+        if (!forward_consume_delim(st, pos, page_start, lines))
+          return;
+        mask &= mask - 1;
       }
     }
 
@@ -551,6 +623,12 @@ static void scan_forward(std::stop_token stop, PagerState *st) {
 
   if (!st->aborted.load(std::memory_order_acquire))
     forward_finish(st, page_start, size);
+
+  {
+    std::lock_guard<std::mutex> lk(st->mtx);
+    st->scan_finished.store(true, std::memory_order_release);
+  }
+  st->cv.notify_all();
 }
 
 static void scan_backward(std::stop_token stop, PagerState *st) {
@@ -559,12 +637,23 @@ static void scan_backward(std::stop_token stop, PagerState *st) {
   const uint8x16_t needle = vdupq_n_u8(st->delimiter);
 
   const size_t cap = std::max<size_t>(st->page_lines, 1);
-  Segment *segments = static_cast<Segment *>(malloc(sizeof(Segment) * cap));
-  if (!segments) {
-    st->aborted.store(true, std::memory_order_release);
-    st->scan_finished.store(true, std::memory_order_release);
-    st->cv.notify_all();
-    return;
+
+  Segment *segments;
+  Segment stack_segments[STACK_SEG_CAP];
+  bool heap_alloced = false;
+
+  if (cap <= STACK_SEG_CAP) {
+    segments = stack_segments;
+  } else {
+    segments = static_cast<Segment *>(malloc(sizeof(Segment) * cap));
+    if (!segments) {
+      std::lock_guard<std::mutex> lk(st->mtx);
+      st->aborted.store(true, std::memory_order_release);
+      st->scan_finished.store(true, std::memory_order_release);
+      st->cv.notify_all();
+      return;
+    }
+    heap_alloced = true;
   }
 
   size_t segment_count = 0;
@@ -573,6 +662,9 @@ static void scan_backward(std::stop_token stop, PagerState *st) {
 
   while (block_end > 0 && !stop.stop_requested() &&
          !st->aborted.load(std::memory_order_acquire)) {
+    if (block_end >= 2 * BLOCK_SIZE)
+      __builtin_prefetch(data + block_end - 2 * BLOCK_SIZE, 0, 3);
+
     const size_t block_start =
         (block_end > BLOCK_SIZE) ? (block_end - BLOCK_SIZE) : 0;
 
@@ -584,17 +676,17 @@ static void scan_backward(std::stop_token stop, PagerState *st) {
 
       const uint8x16_t chunk = vld1q_u8(data + i);
       const uint8x16_t cmp = vceqq_u8(chunk, needle);
-      const uint64x2_t lanes = vreinterpretq_u64_u8(cmp);
+      uint32_t mask = neon_movemask(cmp);
 
-      if (vgetq_lane_u64(lanes, 0) || vgetq_lane_u64(lanes, 1)) {
-        for (int b = 15; b >= 0; --b) {
-          if (data[i + static_cast<size_t>(b)] == st->delimiter) {
-            if (!backward_consume_delim(st, segments, segment_count,
-                                        segment_end,
-                                        i + static_cast<size_t>(b)))
-              goto done;
-          }
-        }
+      while (mask) {
+        const uint32_t bit = 31u - static_cast<uint32_t>(__builtin_clz(mask));
+        const size_t pos = i + bit;
+
+        if (!backward_consume_delim(st, segments, segment_count, segment_end,
+                                    pos))
+          goto done;
+
+        mask &= ~(1u << bit);
       }
     }
 
@@ -627,7 +719,14 @@ static void scan_backward(std::stop_token stop, PagerState *st) {
   }
 
 done:
-  free(segments);
+  if (heap_alloced)
+    free(segments);
+
+  {
+    std::lock_guard<std::mutex> lk(st->mtx);
+    st->scan_finished.store(true, std::memory_order_release);
+  }
+  st->cv.notify_all();
 }
 
 #endif
@@ -638,7 +737,11 @@ static void background_scanner(std::stop_token stop, PagerState *st) {
       PageItem item{nullptr, 0, false};
       queue_push_item(st, item);
     }
-    st->scan_finished.store(true, std::memory_order_release);
+
+    {
+      std::lock_guard<std::mutex> lk(st->mtx);
+      st->scan_finished.store(true, std::memory_order_release);
+    }
     st->cv.notify_all();
     return;
   }
@@ -647,9 +750,6 @@ static void background_scanner(std::stop_token stop, PagerState *st) {
     scan_backward(stop, st);
   else
     scan_forward(stop, st);
-
-  st->scan_finished.store(true, std::memory_order_release);
-  st->cv.notify_all();
 }
 
 static napi_value Open(napi_env env, napi_callback_info info) {
@@ -799,42 +899,42 @@ static napi_value NextSync(napi_env env, napi_callback_info info) {
   }
 
   ps->retain_ref();
-  auto release_ps = [&] {
-    if (ps) {
-      ps->release_ref();
-      ps = nullptr;
-    }
-  };
 
   PageItem item;
 
   while (!queue_pop_item(ps, item)) {
-    if (ps->aborted.load(std::memory_order_acquire) ||
-        ps->scan_finished.load(std::memory_order_acquire)) {
-      release_ps();
+    if (ps->aborted.load(std::memory_order_acquire)) {
+      ps->release_ref();
       napi_value n;
       napi_get_null(env, &n);
       return n;
     }
 
-    std::unique_lock lk(ps->mtx);
+    std::unique_lock<std::mutex> lk(ps->mtx);
     ps->cv.wait(lk, [&] {
       return ps->aborted.load(std::memory_order_acquire) ||
              ps->scan_finished.load(std::memory_order_acquire) ||
              !queue_empty(ps);
     });
+
+    if (ps->aborted.load(std::memory_order_acquire)) {
+      ps->release_ref();
+      napi_value n;
+      napi_get_null(env, &n);
+      return n;
+    }
   }
 
   napi_value buf;
   if (!create_page_value(env, ps, item, &buf)) {
     if (item.owned && item.data)
       free(const_cast<char *>(item.data));
-    release_ps();
+    ps->release_ref();
     napi_throw_error(env, nullptr, "Failed to create buffer");
     return nullptr;
   }
 
-  release_ps();
+  ps->release_ref();
   return buf;
 }
 
@@ -878,12 +978,6 @@ static napi_value Next(napi_env env, napi_callback_info info) {
   }
 
   ps->retain_ref();
-  auto release_ps = [&] {
-    if (ps) {
-      ps->release_ref();
-      ps = nullptr;
-    }
-  };
 
   napi_deferred deferred;
   napi_create_promise(env, &deferred, &promise);
@@ -894,21 +988,20 @@ static napi_value Next(napi_env env, napi_callback_info info) {
     if (!create_page_value(env, ps, item, &buf)) {
       if (item.owned && item.data)
         free(const_cast<char *>(item.data));
-      release_ps();
+      ps->release_ref();
       return reject_with_error(env, deferred, "Failed to create buffer");
     }
 
     napi_resolve_deferred(env, deferred, buf);
-    release_ps();
+    ps->release_ref();
     return promise;
   }
 
-  if (ps->aborted.load(std::memory_order_acquire) ||
-      ps->scan_finished.load(std::memory_order_acquire)) {
+  if (ps->aborted.load(std::memory_order_acquire)) {
     napi_value n;
     napi_get_null(env, &n);
     napi_resolve_deferred(env, deferred, n);
-    release_ps();
+    ps->release_ref();
     return promise;
   }
 
@@ -932,7 +1025,7 @@ static napi_value Next(napi_env env, napi_callback_info info) {
           if (wd->ps->scan_finished.load(std::memory_order_acquire))
             return;
 
-          std::unique_lock lk(wd->ps->mtx);
+          std::unique_lock<std::mutex> lk(wd->ps->mtx);
           wd->ps->cv.wait(lk, [&] {
             return wd->ps->aborted.load(std::memory_order_acquire) ||
                    wd->ps->scan_finished.load(std::memory_order_acquire) ||
@@ -964,19 +1057,18 @@ static napi_value Next(napi_env env, napi_callback_info info) {
       data, &data->work);
 
   if (s != napi_ok) {
-    release_ps();
+    ps->release_ref();
     delete data;
     return reject_with_error(env, deferred, "Failed to create async work");
   }
 
   if (napi_queue_async_work(env, data->work) != napi_ok) {
     napi_delete_async_work(env, data->work);
-    release_ps();
+    ps->release_ref();
     delete data;
     return reject_with_error(env, deferred, "Failed to queue async work");
   }
 
-  release_ps();
   return promise;
 }
 
