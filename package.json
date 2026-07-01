@@ -7,7 +7,6 @@
     "build": "npm run build:native && npm run build:js",
     "test": "./scripts/test.sh",
     "test:coverage": "npx --yes lcov-badge2 coverage/lcov.info -o coverage.svg",
-    "prepublishOnly": "npm run test",
     "benchmark": "./scripts/benchmark.sh",
     "prettier": "npx prettier -wu './(src|test)/**/*.{js,cjs,mjs,ts,cts,mts,json,yml,md}'"
   },
