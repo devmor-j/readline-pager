@@ -219,7 +219,15 @@ static inline bool queue_pop_item(PagerState *st, PageItem &out) {
     return false;
 
   out = st->queue[tail];
+  const bool was_full = ((st->head.load(std::memory_order_acquire) + 1) &
+                         (QUEUE_CAP - 1)) == tail;
   st->tail.store((tail + 1) & (QUEUE_CAP - 1), std::memory_order_release);
+
+  if (was_full) {
+    std::lock_guard<std::mutex> lk(st->mtx);
+    st->cv.notify_one();
+  }
+
   return true;
 }
 
@@ -904,6 +912,13 @@ static napi_value NextSync(napi_env env, napi_callback_info info) {
 
   while (!queue_pop_item(ps, item)) {
     if (ps->aborted.load(std::memory_order_acquire)) {
+      ps->release_ref();
+      napi_value n;
+      napi_get_null(env, &n);
+      return n;
+    }
+
+    if (ps->scan_finished.load(std::memory_order_acquire)) {
       ps->release_ref();
       napi_value n;
       napi_get_null(env, &n);
