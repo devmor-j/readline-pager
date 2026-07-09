@@ -6,18 +6,6 @@ High-performance paginated file reader for Node.js. Processes large text files w
 
 **Key Stats:** 100% coverage target, zero external dependencies, ~3× faster than Node.js `readline` (JS), ~6× faster with native C++.
 
-## Codemem
-
-MANDATORY: Before ANY file operation, load `.claude/skills/codemem/SKILL.md`. No exceptions.
-
-MEMORY RULE: Save user decisions, preferences, and project rules as `codemem` memories.
-If I say "always do X" or "I prefer Y" — store it.
-
-## Code Quality Rules
-
-- Never organize or group imports — instead, run `npm run prettier` before done (the `prettier-plugin-organize-imports` plugin auto-sorts them).
-- No external dependencies ever — only Node.js built-ins.
-
 ## Exact Commands
 
 ```bash
@@ -69,10 +57,11 @@ test/
 
 ### Key Architecture Details
 
-- **Dual-FD pattern**: Both readers open TWO file descriptors — one sync (`openSync`) for `nextSync()`, one async (`fs/promises.open`) for the background prefetch loop. They are closed independently.
+- **Dual-FD pattern**: Both JS readers open TWO file descriptors — one sync (`openSync`) for `nextSync()`, one async (`fs/promises.open`) for the background prefetch loop. They are closed independently.
 - **Async prefetch**: A voided IIFE starts on construction, fills a ring buffer to `prefetch` depth, and yields via `setImmediate` between fill bursts. `flushTail()` pushes remaining data as the final page.
 - **Ring buffer** (`helper.ts`): Grows dynamically (doubles on full). The async `shift(done)` method waits on a consumer-waiter promise when empty. `wake()` resolves pending waiters (used by `close()`).
 - **Native cleanup**: `native.ts` uses fire-and-forget `void close().catch(() => {})` in `Symbol.dispose` and sync iterator `finally` blocks.
+- **Native C++ architecture**: The C++ addon uses `mmap` for zero-copy file mapping, SIMD (AVX2 on x86, NEON on ARM) for delimiter scanning, and a lock-free ring buffer for producer-consumer communication. A background thread scans the file for delimiters while the JS side consumes pages.
 
 ### API Contract
 
@@ -111,6 +100,8 @@ Pager<T> {
 - Test cleanup uses `try/finally` with `tryDeleteFile(filepath)`
 - All tests are async (even for sync-only paths)
 - Test script runs: `c8 --reporter=text --reporter=lcov node --test --experimental-strip-types --enable-source-maps --test-concurrency=4 --test-timeout=120000 "test/**/*.test.ts"`
+- Tests import from `../dist/main.mjs` — build first or they fail
+- `createBigTmpFile` in `utils.ts` generates large files (up to 10M lines) with signal-based cleanup for benchmarks
 
 ## Operational Gotchas
 
@@ -124,6 +115,12 @@ Pager<T> {
 8. **Build artifacts**: `dist/main.{cjs,mjs,d.mts}` + `dist/native.{cjs,mjs}`. Tests import from `dist/main.mjs`.
 9. **Platform packages**: Optional dependencies (`@devmor-j/readline-pager-linux-{x64,arm64}`, musl variants) are published per-platform and loaded by platform detection in `native.ts`.
 
+## Code Quality Rules
+
+- Never organize or group imports — instead, run `npm run prettier` before done.
+- No external dependencies ever — only Node.js built-ins.
+- C++ code uses C++23 with `-fno-exceptions -fno-rtti` — no try/catch in native code (use error codes and early returns).
+
 ## Code Style & Conventions
 
 - ESM by default (`type: module` in `package.json`)
@@ -132,6 +129,11 @@ Pager<T> {
 - Maintain 90%+ line coverage
 - Must work for both ESM and CommonJS consumers via dual exports
 - Run `npm run prettier` before committing (formats + sorts imports)
+- TypeScript uses `allowImportingTsExtensions: true` — `.ts` extensions required in imports
+- TypeScript targets `ES2023` with `ESNext.Disposable` lib for `Symbol.dispose`/`Symbol.asyncDispose` support
+- TypeScript types include `@types/deno` and `@types/bun` for cross-runtime compatibility
+- C++ code uses `static_cast` for all casts (no C-style casts)
+- C++ code uses `napi_throw_error` for error handling (no exceptions)
 
 ## Commit Rules
 
@@ -152,4 +154,3 @@ Pager<T> {
 - Minimum Node.js: 18.12, Dev: 26.x, TypeScript 6.x
 - Bundler: `tsdown` v0.22.x, Native build: `node-gyp`
 - CI: GitHub Actions (Linux x64 + arm64, Alpine for musl)
-- MCP: `codemem` server configured in `.mcp.json`
