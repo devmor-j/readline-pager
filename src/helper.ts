@@ -9,7 +9,6 @@ export function createRingBuffer<T>(capacity: number) {
   let count = 0;
 
   let consumerWaiter: (() => void) | null = null;
-  let producerWaiter: (() => void) | null = null;
 
   function push(item: T) {
     if (count === buf.length) {
@@ -48,12 +47,6 @@ export function createRingBuffer<T>(capacity: number) {
 
     count--;
 
-    if (producerWaiter) {
-      const w = producerWaiter;
-      producerWaiter = null;
-      w();
-    }
-
     return v;
   }
 
@@ -73,12 +66,6 @@ export function createRingBuffer<T>(capacity: number) {
     if (consumerWaiter) {
       const w = consumerWaiter;
       consumerWaiter = null;
-      w();
-    }
-
-    if (producerWaiter) {
-      const w = producerWaiter;
-      producerWaiter = null;
       w();
     }
   }

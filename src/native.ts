@@ -36,8 +36,10 @@ function getPackageName(): string {
 }
 
 function loadNativeAddon(): NativeAddon {
+  const packageName = getPackageName();
+
   try {
-    return require(getPackageName());
+    return require(packageName);
   } catch {
     const p = platform();
     const a = arch();

@@ -154,3 +154,9 @@ Pager<T> {
 - Minimum Node.js: 18.12, Dev: 26.x, TypeScript 6.x
 - Bundler: `tsdown` v0.22.x, Native build: `node-gyp`
 - CI: GitHub Actions (Linux x64 + arm64, Alpine for musl)
+
+## Bash Command Timeout Rule
+
+- Always use `timeout 90` for bash commands that may take a long time (build, test, benchmark).
+- Always set `auto_background_after: 90` for long-running bash commands.
+- Never let a command run without a timeout — the agent can get stuck otherwise.
