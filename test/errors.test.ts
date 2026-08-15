@@ -67,4 +67,71 @@ suite("errors", () => {
       await tryDeleteFile(filepath);
     }
   });
+
+  test("createNativePager throws on unsupported platform", () => {
+    const originalPlatform = process.platform;
+    const originalArch = process.arch;
+
+    Object.defineProperty(process, "platform", {
+      value: "win32",
+      configurable: true,
+    });
+    Object.defineProperty(process, "arch", {
+      value: "x64",
+      configurable: true,
+    });
+
+    try {
+      assert.throws(() => {
+        createNativePager("dummy");
+      }, /Unsupported platform/);
+    } finally {
+      Object.defineProperty(process, "platform", {
+        value: originalPlatform,
+        configurable: true,
+      });
+      Object.defineProperty(process, "arch", {
+        value: originalArch,
+        configurable: true,
+      });
+    }
+  });
+
+  test("createNativePager throws when native addon not available", () => {
+    const originalPlatform = process.platform;
+    const originalArch = process.arch;
+
+    if (originalPlatform !== "linux") return;
+
+    Object.defineProperty(process, "platform", {
+      value: "linux",
+      configurable: true,
+    });
+    Object.defineProperty(process, "arch", {
+      value: "ppc64",
+      configurable: true,
+    });
+
+    try {
+      assert.throws(() => {
+        createNativePager("dummy");
+      }, /Native addon not available/);
+    } finally {
+      Object.defineProperty(process, "platform", {
+        value: originalPlatform,
+        configurable: true,
+      });
+      Object.defineProperty(process, "arch", {
+        value: originalArch,
+        configurable: true,
+      });
+    }
+  });
+
+  test("createNativePager throws on multi-character delimiter", () => {
+    assert.throws(
+      () => createNativePager("dummy", { delimiter: "\n\n" }),
+      /native reader only supports single-character delimiters/,
+    );
+  });
 });
