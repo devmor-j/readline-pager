@@ -1,6 +1,6 @@
 {
   "name": "readline-pager",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "scripts": {
     "build:js": "tsdown",
     "build:native": "node-gyp rebuild && node ./scripts/gen-compile-flags.ts",
